@@ -2,6 +2,7 @@ extern crate tokio_fastcgi;
 use tokio_fastcgi::*;
 
 extern crate byteorder;
+extern crate env_logger;
 extern crate futures;
 extern crate tokio_core;
 extern crate tokio_proto;
@@ -43,14 +44,25 @@ impl Service for HelloService {
             Message::WithBody(head, body) => {
                 println!("withbody: head: {:?}", head);
                 println!("withbody: body: {:?}", body);
+
                 resp.request_id = head.request_id;
-                future::done(Ok(resp)).boxed()
+
+                let resp = body
+                    .for_each(|record| {
+                        println!("{:?}", record);
+                        Ok(())
+                    })
+                    .map(move |_| resp);
+
+                resp.boxed()
             }
         }
     }
 }
 
 pub fn main() {
+    env_logger::init().unwrap();
+
     let filename = "hello.sock";
 
     let mut reactor = Core::new().expect("failed to create reactor core");

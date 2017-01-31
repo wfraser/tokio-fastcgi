@@ -3,7 +3,7 @@ use super::rawstruct::*;
 
 use enum_primitive::FromPrimitive;
 use tokio_core::io::{Codec, EasyBuf};
-use tokio_proto::streaming::pipeline::Frame;
+use tokio_proto::streaming::multiplex::{Frame, RequestId};
 
 use std::io;
 use std::mem::size_of;
@@ -62,10 +62,12 @@ impl Codec for FastcgiCodec {
     type Out = Frame<FastcgiRecord, FastcgiRecord, io::Error>;
 
     fn decode(&mut self, buf: &mut EasyBuf) -> Result<Option<Self::In>, io::Error> {
+        debug!("buffer: {} bytes", buf.len());
+
         let header_len = size_of::<FastcgiRecordHeader>();
         if buf.len() < header_len {
-            return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
-                "not enough bytes for header"));
+            debug!("insufficient buffer for the header");
+            return Ok(None);
         }
         let header_bytes = buf.drain_to(header_len);
         let header: FastcgiRecordHeader = unsafe { from_bytes(header_bytes.as_slice()) };
@@ -76,31 +78,76 @@ impl Codec for FastcgiCodec {
             return Err(io::Error::new(io::ErrorKind::InvalidData, msg));
         }
 
-        let content_length = ntohs(header.content_length) as usize;
-        let mut content = Vec::with_capacity(content_length);
-        content.extend_from_slice(buf.drain_to(content_length).as_slice());
+        let content_len = ntohs(header.content_length) as usize;
+        if buf.len() < content_len {
+            debug!("insufficient buffer for the content");
+            return Ok(None);
+        }
+        let mut content = Vec::with_capacity(content_len);
+        content.extend_from_slice(buf.drain_to(content_len).as_slice());
 
+        if buf.len() < header.padding_length as usize {
+            debug!("insufficient buffer for the padding");
+            return Ok(None);
+        }
         buf.drain_to(header.padding_length as usize);
 
         let record_type = RecordType::from_u8(header.record_type).unwrap_or_else(|| {
             warn!("unknown record type {}", header.record_type);
             RecordType::UnknownType
         });
+        let request_id = ntohs(header.request_id);
 
-        Ok(Some(Frame::Message {
-            message: FastcgiRecord {
-                record_type: record_type,
-                request_id: ntohs(header.request_id),
-                content: content,
+        debug!("request id: {}; record type: {:?}", request_id, record_type);
+
+        let message = FastcgiRecord {
+            record_type: record_type,
+            request_id: request_id,
+            content: content,
+        };
+
+        let frame = match message.record_type {
+            RecordType::BeginRequest => Frame::Message {
+                id: request_id as RequestId,
+                message: message,
+                body: true,
+                solo: false,
             },
-            body: false,    // TODO: also support streams
-        }))
+            RecordType::AbortRequest
+                    | RecordType::Stdin if message.content.is_empty()
+                    => {
+                debug!("got empty stdin chunk");
+                Frame::Body {
+                    id: request_id as RequestId,
+                    chunk: None,
+                }
+            },
+            RecordType::GetValuesResult
+                    | RecordType::EndRequest
+                    | RecordType::Stdout
+                    | RecordType::Stderr
+                    => {
+                let msg = format!("unexpected message type from web server: {:?}",
+                                  message.record_type);
+                error!("{}", msg);
+                Frame::Error {
+                    id: request_id as RequestId,
+                    error: io::Error::new(io::ErrorKind::InvalidData, msg),
+                }
+            },
+            _ => Frame::Body {
+                id: request_id as RequestId,
+                chunk: Some(message),
+            }
+        };
+
+        Ok(Some(frame))
     }
 
     fn encode(&mut self, msg: Self::Out, buf: &mut Vec<u8>) -> io::Result<()> {
         let mut record = match msg {
-            Frame::Message { message, body: _ } => message,
-            Frame::Body { chunk: message } => match message {
+            Frame::Message { id: _, message, body: _, solo: _ } => message,
+            Frame::Body { id: _, chunk: message } => match message {
                 Some(message) => message,
                 None => {
                     let msg = "stream message not present";
@@ -108,7 +155,7 @@ impl Codec for FastcgiCodec {
                     return Err(io::Error::new(io::ErrorKind::InvalidData, msg));
                 }
             },
-            Frame::Error { error } => {
+            Frame::Error { id: _, error } => {
                 return Err(error);
             }
         };

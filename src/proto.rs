@@ -1,7 +1,7 @@
 use super::codec::*;
 
 use tokio_core::io::{Io, Framed};
-use tokio_proto::streaming::pipeline::ServerProto;
+use tokio_proto::streaming::multiplex::ServerProto;
 
 use std::io;
 
