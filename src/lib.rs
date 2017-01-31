@@ -14,7 +14,8 @@ mod s11n;
 
 pub use codec::{FastcgiCodec, FastcgiRecord};
 pub use proto::FastcgiProto;
-pub use s11n::{RecordType, FASTCGI_VERSION};
+pub use rawstruct::*; // TODO: shouldn't expose this really
+pub use s11n::{RecordType, FASTCGI_VERSION, BeginRequestBody};
 
 #[cfg(test)]
 mod tests {
