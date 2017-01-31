@@ -4,6 +4,11 @@ use super::endian::*;
 
 pub const FASTCGI_VERSION: u8 = 1;
 
+// Variables for the RecordType::GetValues and GetValuesResult records.
+pub const FCGI_MAX_CONNS: &'static str = "FCGI_MAX_CONNS";
+pub const FCGI_MAX_REQS: &'static str = "FCGI_MAX_REQS";
+pub const FCGI_MPXS_CONNS: &'static str = "FCGI_MPXS_CONNS";
+
 enum_from_primitive! {
     #[repr(u8)]
     #[derive(Debug, PartialEq)]
@@ -30,6 +35,17 @@ enum_from_primitive! {
         Responder = 1,
         Authorizer = 2,
         Filter = 3,
+    }
+}
+
+enum_from_primitive! {
+    #[repr(u8)]
+    #[derive(Debug, PartialEq)]
+    pub enum ProtocolStatus {
+        RequestComplete = 0,
+        CantMultiplexConnections = 1,
+        Overloaded = 2,
+        UnknownRole = 3,
     }
 }
 
