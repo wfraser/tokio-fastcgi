@@ -6,10 +6,12 @@ extern crate tokio_core;
 extern crate tokio_uds;
 
 mod endian;
-mod codec;
+mod highlevel;
+mod lowlevel;
 mod rawstruct;
 mod s11n;
 
-pub use codec::{FastcgiLowlevelCodec, FastcgiRecord};
+pub use highlevel::{FastcgiRequest, FastcgiResponse};
+pub use lowlevel::{FastcgiLowlevelCodec, FastcgiRecord};
 pub use rawstruct::*; // TODO: shouldn't expose this really
 pub use s11n::{RecordType, FASTCGI_VERSION, BeginRequestBody};
