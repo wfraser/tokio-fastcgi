@@ -6,13 +6,15 @@ extern crate tokio_core;
 extern crate tokio_proto;
 extern crate tokio_uds;
 
-mod byteorder_ext;
+mod endian;
 mod codec;
 mod proto;
 mod rawstruct;
+mod s11n;
 
-pub use codec::{FastcgiCodec, FastcgiRecord, RecordType, FASTCGI_VERSION};
+pub use codec::{FastcgiCodec, FastcgiRecord};
 pub use proto::FastcgiProto;
+pub use s11n::{RecordType, FASTCGI_VERSION};
 
 #[cfg(test)]
 mod tests {

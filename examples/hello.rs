@@ -50,6 +50,10 @@ impl Service for HelloService {
                 let resp = body
                     .for_each(|record| {
                         println!("{:?}", record);
+                        match record.record_type {
+                            //TODO
+                        }
+
                         Ok(())
                     })
                     .map(move |_| resp);
