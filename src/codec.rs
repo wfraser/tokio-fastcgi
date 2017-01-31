@@ -4,7 +4,6 @@ use super::s11n::*;
 
 use enum_primitive::FromPrimitive;
 use tokio_core::io::{Codec, EasyBuf};
-use tokio_proto::streaming::multiplex::{Frame, RequestId};
 
 use std::io;
 use std::mem::size_of;
@@ -16,7 +15,7 @@ pub struct FastcgiRecord {
     pub content: Vec<u8>,
 }
 
-pub struct FastcgiCodec;
+pub struct FastcgiLowlevelCodec;
 
 fn read_header(buf: &mut EasyBuf) -> Option<FastcgiRecordHeader> {
     let header_len = size_of::<FastcgiRecordHeader>();
@@ -28,9 +27,9 @@ fn read_header(buf: &mut EasyBuf) -> Option<FastcgiRecordHeader> {
     }
 }
 
-impl Codec for FastcgiCodec {
-    type In = Frame<FastcgiRecord, FastcgiRecord, io::Error>;
-    type Out = Frame<FastcgiRecord, FastcgiRecord, io::Error>;
+impl Codec for FastcgiLowlevelCodec {
+    type In = FastcgiRecord;
+    type Out = FastcgiRecord;
 
     fn decode(&mut self, buf: &mut EasyBuf) -> Result<Option<Self::In>, io::Error> {
         debug!("buffer: {} bytes", buf.len());
@@ -76,72 +75,20 @@ impl Codec for FastcgiCodec {
             content: content,
         };
 
-        let frame = match message.record_type {
-            RecordType::BeginRequest => {
-                Frame::Message {
-                    id: request_id as RequestId,
-                    message: message,
-                    body: true,
-                    solo: false,
-                }
-            },
-            RecordType::AbortRequest
-                    | RecordType::Stdin if message.content.is_empty()
-                    => {
-                debug!("got empty stdin chunk");
-                Frame::Body {
-                    id: request_id as RequestId,
-                    chunk: None,
-                }
-            },
-            RecordType::GetValuesResult
-                    | RecordType::EndRequest
-                    | RecordType::Stdout
-                    | RecordType::Stderr
-                    => {
-                let msg = format!("unexpected message type from web server: {:?}",
-                                  message.record_type);
-                error!("{}", msg);
-                Frame::Error {
-                    id: request_id as RequestId,
-                    error: io::Error::new(io::ErrorKind::InvalidData, msg),
-                }
-            },
-            _ => Frame::Body {
-                id: request_id as RequestId,
-                chunk: Some(message),
-            }
-        };
-
-        Ok(Some(frame))
+        Ok(Some(message))
     }
 
-    fn encode(&mut self, msg: Self::Out, buf: &mut Vec<u8>) -> io::Result<()> {
-        let mut record = match msg {
-            Frame::Message { id: _, message, body: _, solo: _ } => message,
-            Frame::Body { id: _, chunk: message } => match message {
-                Some(message) => message,
-                None => {
-                    let msg = "stream message not present";
-                    error!("{}", msg);
-                    return Err(io::Error::new(io::ErrorKind::InvalidData, msg));
-                }
-            },
-            Frame::Error { id: _, error } => {
-                return Err(error);
-            }
-        };
-
+    fn encode(&mut self, mut msg: Self::Out, buf: &mut Vec<u8>) -> io::Result<()> {
         let header = FastcgiRecordHeader {
             version: FASTCGI_VERSION,
-            record_type: record.record_type as u8,
-            request_id: NetworkU16::new(record.request_id),
-            content_length: NetworkU16::new(record.content.len() as u16),
+            record_type: msg.record_type as u8,
+            request_id: NetworkU16::new(msg.request_id),
+            content_length: NetworkU16::new(msg.content.len() as u16),
             padding_length: 0,
             reserved: 0,
         };
         buf.extend_from_slice(unsafe { as_bytes(&header) });
-        buf.append(&mut record.content);
+        buf.append(&mut msg.content);
 
         Ok(())
     }
