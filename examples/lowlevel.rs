@@ -28,7 +28,7 @@ fn read_len(idx: &mut usize, bytes: &[u8]) -> usize {
     len
 }
 
-fn print_record(record: FastcgiRecord) {
+fn print_record(record: &FastcgiRecord) {
     println!("request id: {}", record.request_id);
     println!("request type: {:?}", record.record_type);
     println!("content length: {}", record.content.len());
@@ -81,11 +81,12 @@ fn main() {
         println!("{:#?}", socket);
 
         socket.framed(FastcgiLowlevelCodec)
-            .take_while(|record| future::ok(!record.content.is_empty()))
-            .for_each(|record| {
+            .take_while(move |record| {
                 print_record(record);
-                Ok(())
+                let done = record.record_type == RecordType::Stdin && record.content.is_empty();
+                future::ok(!done)
             })
+            .for_each(|_| future::ok(()))
     });
 
     reactor.run(srv).expect("failed to run the server");
