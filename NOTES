@@ -1,0 +1,7 @@
+investigate making the codec be multiplexed -- because multiple unrelated requests can use the same connection
+
+make a "network byte order short" type that serializes correctly but is otherwise only accessible via a getter that does the byte swap
+
+FastCGI spec: https://github.com/Gedweb/rust-gfcgi/blob/master/doc/fcgi-spec.md
+Project with some nice FCGI parsing code: https://github.com/mohtar/rust-fastcgi
+Tokio streaming protocols tutorial: https://tokio.rs/docs/going-deeper/streaming/

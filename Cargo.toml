@@ -1,0 +1,15 @@
+[package]
+name = "tokio-fastcgi"
+version = "0.1.0"
+authors = ["William R. Fraser <wfraser@codewise.org>"]
+
+[dependencies]
+byteorder = "1.0"
+enum_primitive = "0.1"
+futures = "0.1"
+log = "0.3"
+tokio-core = "0.1"
+tokio-uds = "0.1"
+tokio-proto = "0.1"
+tokio-service = "0.1"
+
