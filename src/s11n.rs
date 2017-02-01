@@ -29,7 +29,7 @@ enum_from_primitive! {
 }
 
 enum_from_primitive! {
-    #[repr(u8)]
+    #[repr(u16)]
     #[derive(Debug, PartialEq)]
     pub enum Role {
         Responder = 1,
