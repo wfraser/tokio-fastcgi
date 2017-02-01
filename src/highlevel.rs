@@ -1,4 +1,4 @@
-use futures::{Sink, Stream, Poll, StartSend, Async};
+use futures::{Sink, Stream};
 
 use std::collections::HashMap;
 use std::io;

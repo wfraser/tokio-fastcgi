@@ -12,6 +12,5 @@ mod rawstruct;
 mod s11n;
 
 pub use highlevel::{FastcgiRequest, FastcgiResponse};
-pub use lowlevel::{FastcgiLowlevelCodec, FastcgiRecord};
-pub use rawstruct::*; // TODO: shouldn't expose this really
+pub use lowlevel::{FastcgiLowlevelCodec, FastcgiRecord, FastcgiRecordBody};
 pub use s11n::{RecordType, FASTCGI_VERSION, BeginRequestBody, Role};

@@ -11,7 +11,7 @@ pub const FCGI_MPXS_CONNS: &'static str = "FCGI_MPXS_CONNS";
 
 enum_from_primitive! {
     #[repr(u8)]
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Copy, Clone)]
     pub enum RecordType {
         BeginRequest = 1,
         AbortRequest = 2,
@@ -30,7 +30,7 @@ enum_from_primitive! {
 
 enum_from_primitive! {
     #[repr(u16)]
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Copy, Clone)]
     pub enum Role {
         Responder = 1,
         Authorizer = 2,
@@ -40,7 +40,7 @@ enum_from_primitive! {
 
 enum_from_primitive! {
     #[repr(u8)]
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Copy, Clone)]
     pub enum ProtocolStatus {
         RequestComplete = 0,
         CantMultiplexConnections = 1,

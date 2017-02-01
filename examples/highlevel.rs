@@ -1,19 +1,15 @@
 extern crate tokio_fastcgi;
 use tokio_fastcgi::*;
 
-extern crate byteorder;
-extern crate enum_primitive;
 extern crate env_logger;
 extern crate futures;
 #[macro_use] extern crate log;
 extern crate tokio_core;
 extern crate tokio_uds;
 
-use byteorder::{ByteOrder, NetworkEndian};
-use enum_primitive::FromPrimitive;
 use futures::{future, Future, Stream};
 use tokio_core::reactor::Core;
-use tokio_core::io::Io;
+use tokio_core::io::{Io, EasyBuf};
 use tokio_uds::*;
 
 use std::collections::btree_map::*;
@@ -25,7 +21,7 @@ use std::io;
 
 struct FastcgiRequestState {
     pub role: Role,
-    pub params: HashMap<Vec<u8>, Vec<u8>>,
+    pub params: HashMap<Vec<u8>, EasyBuf>,
     pub headers_done: bool,
 }
 
@@ -38,43 +34,15 @@ impl FastcgiRequestState {
         }
     }
 
-    pub fn set_param(&mut self, key: Vec<u8>, value: Vec<u8>) {
+    // Sadly, EasyBuf doesn't implement Hash or Eq, so we have to copy it to a Vec to use it as the
+    // key of a HashMap. Luckily, header and environment variable names are usually very short.
+    pub fn set_param(&mut self, key: Vec<u8>, value: EasyBuf) {
         self.params.insert(key, value);
     }
 }
 
 struct FastcgiMultiplexer {
     requests: BTreeMap<u16, FastcgiRequestState>,
-}
-
-fn read_len(idx: &mut usize, bytes: &[u8]) -> usize {
-    let len: usize;
-    if bytes[*idx] < 0x80 {
-        len = bytes[*idx] as usize;
-        *idx += 1;
-    } else {
-        len = NetworkEndian::read_u32(&bytes[*idx..]) as usize;
-        *idx += 4;
-    }
-    len
-}
-
-fn read_params(state: &mut FastcgiRequestState, buf: &[u8]) {
-    let mut idx = 0;
-    loop {
-        if idx == buf.len() {
-            break;
-        }
-        let name_len = read_len(&mut idx, buf);
-        let value_len = read_len(&mut idx, buf);
-        let mut name = Vec::with_capacity(name_len);
-        let mut value = Vec::with_capacity(value_len);
-        name.extend_from_slice(&buf[idx .. idx + name_len]);
-        idx += name_len;
-        value.extend_from_slice(&buf[idx .. idx + value_len]);
-        idx += value_len;
-        state.set_param(name, value);
-    }
 }
 
 impl FastcgiMultiplexer {
@@ -93,15 +61,7 @@ impl FastcgiMultiplexer {
                     error!("{}", msg);
                     return future::err(io::Error::new(io::ErrorKind::InvalidData, msg)).boxed();
                 } else {
-                    let body: BeginRequestBody = unsafe { from_bytes(&rec.content) };
-                    let role = match Role::from_u16(body.role.get()) {
-                        Some(role) => role,
-                        None => {
-                            let msg = format!("unknown role {}", body.role.get());
-                            error!("{}", msg);
-                            return future::err(io::Error::new(io::ErrorKind::InvalidData, msg)).boxed();
-                        }
-                    };
+                    let role = rec.content.unwrap_begin_request().role;
                     entry.insert(FastcgiRequestState::new(role));
                     return future::ok(()).boxed();
                 }
@@ -116,12 +76,14 @@ impl FastcgiMultiplexer {
                         return future::err(io::Error::new(io::ErrorKind::InvalidData, msg)).boxed();
                     },
                     RecordType::Params => {
-                        if rec.content.len() == 0 {
+                        if rec.content_len == 0 {
                             // Issue request now
                             debug!("issue request now");
                             state.headers_done = true;
                         } else {
-                            read_params(state, &rec.content);
+                            for &(ref name, ref value) in rec.content.unwrap_params() {
+                                state.set_param(Vec::from(name.as_slice()), value.clone());
+                            }
                         }
                     },
                     _ => unimplemented!()
