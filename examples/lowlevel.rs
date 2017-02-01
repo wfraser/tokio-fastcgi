@@ -18,7 +18,31 @@ fn print_record(record: &FastcgiRecord) {
     println!("request id: {}", record.request_id);
     println!("request type: {:?}", record.record_type);
     println!("content length: {}", record.content_len);
-    println!("body: {:#?}", record.content);
+    match record.content {
+        FastcgiRecordBody::Params(ref params) => {
+            for &(ref name, ref value) in params {
+                println!("param: {} = {}",
+                         String::from_utf8_lossy(name.as_slice()),
+                         String::from_utf8_lossy(value.as_slice()));
+            }
+        },
+        FastcgiRecordBody::Data(ref buf) => {
+            for (i, byte) in buf.as_slice().iter().enumerate() {
+                if i % 8 == 0 {
+                    if i != 0 {
+                        println!("");
+                    }
+                    print!("\t");
+                } else if i % 4 == 0 {
+                    print!(" ");
+                }
+                print!("{:02X} ", byte);
+            }
+        },
+        ref content => {
+            println!("body: {:#?}", content);
+        }
+    }
 }
 
 fn main() {

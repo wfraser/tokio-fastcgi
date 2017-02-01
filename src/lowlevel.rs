@@ -84,13 +84,16 @@ fn read_params(buf: &mut EasyBuf) -> Vec<(EasyBuf, EasyBuf)> {
         let value_len = read_len(buf);
         let name = buf.drain_to(name_len);
         let value = buf.drain_to(value_len);
+        debug!("param ({}, {})",
+               String::from_utf8_lossy(name.as_slice()),
+               String::from_utf8_lossy(value.as_slice()));
         params.push((name, value));
     }
     params
 }
 
 fn read_begin_request_body(buf: &mut EasyBuf) -> io::Result<BeginRequest> {
-    let len = buf.len();
+    let len = size_of::<BeginRequestBody>();
     let raw: BeginRequestBody = unsafe { from_bytes(buf.drain_to(len).as_slice()) };
     let role = match Role::from_u16(raw.role.get()) {
         Some(role) => role,
@@ -139,18 +142,16 @@ impl Codec for FastcgiLowlevelCodec {
         debug!("request id: {}; record type: {:?}, {} bytes of content",
                request_id, record_type, content_len);
 
-        //let mut content = Vec::with_capacity(content_len);
-        //content.extend_from_slice(buf.drain_to(content_len).as_slice());
-
+        let mut content_buf = buf.drain_to(content_len);
         let content = match record_type {
             RecordType::BeginRequest => {
-                FastcgiRecordBody::BeginRequest(read_begin_request_body(buf)?)
+                FastcgiRecordBody::BeginRequest(read_begin_request_body(&mut content_buf)?)
             },
             RecordType::Params => {
-                FastcgiRecordBody::Params(read_params(buf))
+                FastcgiRecordBody::Params(read_params(&mut content_buf))
             },
             _ => {
-                FastcgiRecordBody::Data(buf.drain_to(content_len))
+                FastcgiRecordBody::Data(content_buf)
             }
         };
 
@@ -159,6 +160,8 @@ impl Codec for FastcgiLowlevelCodec {
             return Ok(None);
         }
         buf.drain_to(header.padding_length as usize);
+
+        debug!("buffer now has {} bytes", buf.len());
 
         let message = FastcgiRecord {
             record_type: record_type,
