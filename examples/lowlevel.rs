@@ -8,7 +8,7 @@ extern crate tokio_uds;
 
 use futures::{future, Stream};
 use tokio_core::reactor::Core;
-use tokio_core::io::Io;
+use tokio_core::io::{Io, EasyBuf};
 use tokio_uds::*;
 
 use std::fs;
@@ -19,28 +19,39 @@ fn umask(mask: u32) -> u32 {
     unsafe { umask(mask) }
 }
 
+fn print_data(buf: &EasyBuf) {
+    for (i, byte) in buf.as_slice().iter().enumerate() {
+        if i % 8 == 0 {
+            if i != 0 {
+                println!("");
+            }
+            print!("\t");
+        } else if i % 4 == 0 {
+            print!(" ");
+        }
+        print!("{:02X} ", byte);
+    }
+}
+
 fn print_record(record: &FastcgiRecord) {
+    println!("------------------------------------------------------------------------------");
     println!("request id: {}", record.request_id);
     match record.body {
         FastcgiRecordBody::Params(ref params) => {
+            println!("params - {}:", params.len());
             for &(ref name, ref value) in params {
-                println!("param: {} = {}",
+                println!("  {} = {}",
                          String::from_utf8_lossy(name.as_slice()),
                          String::from_utf8_lossy(value.as_slice()));
             }
         },
         FastcgiRecordBody::Data(ref buf) => {
-            for (i, byte) in buf.as_slice().iter().enumerate() {
-                if i % 8 == 0 {
-                    if i != 0 {
-                        println!("");
-                    }
-                    print!("\t");
-                } else if i % 4 == 0 {
-                    print!(" ");
-                }
-                print!("{:02X} ", byte);
-            }
+            println!("Data - {} bytes:", buf.len());
+            print_data(buf);
+        },
+        FastcgiRecordBody::Stdin(ref buf) => {
+            println!("Stdin - {} bytes", buf.len());
+            print_data(buf);
         },
         ref content => {
             println!("body: {:#?}", content);
