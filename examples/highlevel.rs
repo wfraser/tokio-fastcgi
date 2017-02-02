@@ -17,6 +17,11 @@ use std::collections::HashMap;
 use std::fs;
 use std::io;
 
+fn umask(mask: u32) -> u32 {
+    extern "system" { fn umask(mask: u32) -> u32; }
+    unsafe { umask(mask) }
+}
+
 // TODO: experimental code; most of the following should go in the main crate once it works.
 
 struct FastcgiRequestState {
@@ -108,6 +113,7 @@ fn main() {
 
     let mut reactor = Core::new().expect("failed to create reactor core");
 
+    umask(0);
     let listener = UnixListener::bind(filename, &reactor.handle()).expect("failed to bind socket");
 
     let srv = listener.incoming().for_each(move |(socket, _addr)| {

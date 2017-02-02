@@ -14,6 +14,11 @@ use tokio_uds::*;
 use std::fs;
 use std::io;
 
+fn umask(mask: u32) -> u32 {
+    extern "system" { fn umask(mask: u32) -> u32; }
+    unsafe { umask(mask) }
+}
+
 fn print_record(record: &FastcgiRecord) {
     println!("request id: {}", record.request_id);
     println!("request type: {:?}", record.record_type);
@@ -58,6 +63,7 @@ fn main() {
         }
     }
 
+    umask(0);
     let listener = UnixListener::bind(filename, &reactor.handle()).expect("failed to bind socket");
 
     let srv = listener.incoming().for_each(move |(socket, _addr)| {
