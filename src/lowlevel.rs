@@ -4,41 +4,31 @@ use super::s11n::*;
 
 use byteorder::{ByteOrder, NetworkEndian};
 use enum_primitive::FromPrimitive;
-use tokio_core::io::{Codec, EasyBuf};
+use tokio_core::io::{Codec, EasyBuf, EasyBufMut};
 
 use std::io;
 use std::mem::size_of;
 
 #[derive(Debug)]
 pub struct FastcgiRecord {
-    pub record_type: RecordType,
     pub request_id: u16,
-    pub content: FastcgiRecordBody,
-    pub content_len: usize,
+    pub body: FastcgiRecordBody,
 }
 
 #[derive(Debug)]
 pub enum FastcgiRecordBody {
-    Data(EasyBuf),
-    Params(Vec<(EasyBuf, EasyBuf)>),
     BeginRequest(BeginRequest),
+    AbortRequest,
     EndRequest(EndRequest),
-}
-
-impl FastcgiRecordBody {
-    pub fn unwrap_begin_request(&self) -> &BeginRequest {
-        match self {
-            &FastcgiRecordBody::BeginRequest(ref x) => x,
-            _ => panic!()
-        }
-    }
-
-    pub fn unwrap_params(&self) -> &[(EasyBuf, EasyBuf)] {
-        match self {
-            &FastcgiRecordBody::Params(ref x) => x.as_slice(),
-            _ => panic!()
-        }
-    }
+    Params(Vec<(EasyBuf, EasyBuf)>),
+    Stdin(EasyBuf),
+    Stdout(EasyBuf),
+    Stderr(EasyBuf),
+    Data(EasyBuf),
+    GetValues(Vec<EasyBuf>),
+    GetValuesResult(Vec<(Vec<u8>, Vec<u8>)>),
+    UnknownTypeResponse(u8),
+    UnknownType(u8, EasyBuf), // this one is the the incoming record
 }
 
 #[derive(Debug)]
@@ -74,6 +64,16 @@ fn read_len(buf: &mut EasyBuf) -> usize {
     }
 }
 
+fn write_len(buf: &mut EasyBufMut, len: usize) {
+    if len < 0x80 {
+        buf.push(len as u8);
+    } else {
+        let mut bytes = [0u8; 4];
+        NetworkEndian::write_u32(bytes.as_mut(), len as u32);
+        buf.extend_from_slice(bytes.as_ref());
+    }
+}
+
 fn read_params(buf: &mut EasyBuf) -> Vec<(EasyBuf, EasyBuf)> {
     let mut params = vec![];
     loop {
@@ -90,6 +90,20 @@ fn read_params(buf: &mut EasyBuf) -> Vec<(EasyBuf, EasyBuf)> {
         params.push((name, value));
     }
     params
+}
+
+fn write_params(params: Vec<(Vec<u8>, Vec<u8>)>) -> EasyBuf {
+    let mut out = EasyBuf::new();
+    {
+        let mut out = out.get_mut();
+        for (name, value) in params.into_iter() {
+            write_len(&mut out, name.len());
+            write_len(&mut out, value.len());
+            out.extend_from_slice(name.as_slice());
+            out.extend_from_slice(value.as_slice());
+        }
+    }
+    out
 }
 
 fn read_begin_request_body(buf: &mut EasyBuf) -> io::Result<BeginRequest> {
@@ -135,7 +149,7 @@ impl Codec for FastcgiLowlevelCodec {
 
         let record_type = RecordType::from_u8(header.record_type).unwrap_or_else(|| {
             warn!("unknwon record type {}", header.record_type);
-            RecordType::UnknownType
+            RecordType::Mystery
         });
         let request_id = header.request_id.get();
 
@@ -143,16 +157,37 @@ impl Codec for FastcgiLowlevelCodec {
                request_id, record_type, content_len);
 
         let mut content_buf = buf.drain_to(content_len);
-        let content = match record_type {
+        let body = match record_type {
             RecordType::BeginRequest => {
                 FastcgiRecordBody::BeginRequest(read_begin_request_body(&mut content_buf)?)
+            },
+            RecordType::AbortRequest => {
+                assert_eq!(0, content_len);
+                FastcgiRecordBody::AbortRequest
             },
             RecordType::Params => {
                 FastcgiRecordBody::Params(read_params(&mut content_buf))
             },
-            _ => {
+            RecordType::Stdin => {
+                FastcgiRecordBody::Stdin(content_buf)
+            },
+            RecordType::Data => {
                 FastcgiRecordBody::Data(content_buf)
-            }
+            },
+            RecordType::GetValues => {
+                let params = read_params(&mut content_buf);
+                let names = params.into_iter().map(|(name, _value)| name).collect();
+                FastcgiRecordBody::GetValues(names)
+            },
+            RecordType::Mystery => {
+                FastcgiRecordBody::UnknownType(header.record_type, content_buf)
+            },
+            RecordType::EndRequest | RecordType::Stdout | RecordType::Stderr
+                    | RecordType::GetValuesResult | RecordType::UnknownType => {
+                let msg = format!("illegal record type {:?} from FastCGI client", record_type);
+                error!("{}", msg);
+                return Err(io::Error::new(io::ErrorKind::InvalidData, msg));
+            },
         };
 
         if buf.len() < header.padding_length as usize {
@@ -164,24 +199,40 @@ impl Codec for FastcgiLowlevelCodec {
         debug!("buffer now has {} bytes", buf.len());
 
         let message = FastcgiRecord {
-            record_type: record_type,
             request_id: request_id,
-            content: content,
-            content_len: content_len,
+            body: body,
         };
 
         Ok(Some(message))
     }
 
     fn encode(&mut self, msg: Self::Out, buf: &mut Vec<u8>) -> io::Result<()> {
-        let data = match msg.content {
-            FastcgiRecordBody::Data(buf) => buf,
-            _ => panic!("only FastcgiRecordBody::Data is supported in FastcgiLowlevelCodec::Encode"),
+        let (record_type, data) = match msg.body {
+            FastcgiRecordBody::Stdout(buf) => (RecordType::Stdout, buf),
+            FastcgiRecordBody::Stderr(buf) => (RecordType::Stderr, buf),
+            FastcgiRecordBody::EndRequest(end_body) => {
+                let mut out = vec![0,0,0,0];
+                NetworkEndian::write_u32(out.as_mut_slice(), end_body.app_status);
+                out.push(end_body.protocol_status as u8);
+                out.extend_from_slice(&[0,0,0]);
+                (RecordType::EndRequest, EasyBuf::from(out))
+            },
+            FastcgiRecordBody::GetValuesResult(values) => {
+                (RecordType::GetValuesResult, write_params(values))
+            },
+            FastcgiRecordBody::UnknownTypeResponse(typ) => {
+                let out: Vec<u8> = Vec::<u8>::from([typ, 0, 0, 0, 0, 0, 0, 0].as_ref());
+                (RecordType::UnknownType, EasyBuf::from(out))
+            },
+            _ => {
+                let msg = format!("illegal record {:?} from FastCGI server", msg.body);
+                panic!(msg);
+            }
         };
 
         let header = FastcgiRecordHeader {
             version: FASTCGI_VERSION,
-            record_type: msg.record_type as u8,
+            record_type: record_type as u8,
             request_id: NetworkU16::new(msg.request_id),
             content_length: NetworkU16::new(data.len() as u16),
             padding_length: 0,

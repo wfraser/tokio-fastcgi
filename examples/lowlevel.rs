@@ -21,9 +21,7 @@ fn umask(mask: u32) -> u32 {
 
 fn print_record(record: &FastcgiRecord) {
     println!("request id: {}", record.request_id);
-    println!("request type: {:?}", record.record_type);
-    println!("content length: {}", record.content_len);
-    match record.content {
+    match record.body {
         FastcgiRecordBody::Params(ref params) => {
             for &(ref name, ref value) in params {
                 println!("param: {} = {}",
@@ -72,7 +70,10 @@ fn main() {
         socket.framed(FastcgiLowlevelCodec)
             .take_while(move |record| {
                 print_record(record);
-                let done = record.record_type == RecordType::Stdin && record.content_len == 0;
+                let done = match record.body {
+                    FastcgiRecordBody::Stdin(ref buf) if buf.len() == 0 => true,
+                    _ => false
+                };
                 future::ok(!done)
             })
             .for_each(|_| future::ok(()))

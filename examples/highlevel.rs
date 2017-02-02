@@ -31,9 +31,9 @@ struct FastcgiRequestState {
 }
 
 impl FastcgiRequestState {
-    pub fn new(role: Role) -> FastcgiRequestState {
+    pub fn new(details: &BeginRequest) -> FastcgiRequestState {
         FastcgiRequestState {
-            role: role,
+            role: details.role,
             params: HashMap::new(),
             headers_done: false,
         }
@@ -60,43 +60,38 @@ impl FastcgiMultiplexer {
     pub fn process_record(&mut self, rec: FastcgiRecord) -> Box<Future<Item = (), Error = io::Error>> {
         match self.requests.entry(rec.request_id) {
             Entry::Vacant(entry) => {
-                if rec.record_type != RecordType::BeginRequest {
-                    let msg = format!("first request with id {} was {:?}, not BeginRequest",
-                                      rec.request_id, rec.record_type);
-                    error!("{}", msg);
-                    return future::err(io::Error::new(io::ErrorKind::InvalidData, msg)).boxed();
-                } else {
-                    let role = rec.content.unwrap_begin_request().role;
-                    entry.insert(FastcgiRequestState::new(role));
-                    return future::ok(()).boxed();
+                match rec.body {
+                    FastcgiRecordBody::BeginRequest(ref details) => {
+                        entry.insert(FastcgiRequestState::new(details));
+                        return future::ok(()).boxed();
+                    },
+                    _ => {
+                        let msg = format!("first request with id {} was {:?}, not BeginRequest",
+                                          rec.request_id, rec.body);
+                        error!("{}", msg);
+                        return future::err(io::Error::new(io::ErrorKind::InvalidData, msg)).boxed();
+                    }
                 }
             },
             Entry::Occupied(mut entry) => {
                 let state = entry.get_mut();
-                match rec.record_type {
-                    RecordType::GetValuesResult | RecordType::EndRequest | RecordType::Stdout
-                            | RecordType::Stderr => {
-                        let msg = format!("unexpected record type {:?} from web server",
-                                          rec.record_type);
-                        return future::err(io::Error::new(io::ErrorKind::InvalidData, msg)).boxed();
-                    },
-                    RecordType::Params => {
-                        if rec.content_len == 0 {
-                            // Issue request now
+                match rec.body {
+                    FastcgiRecordBody::Params(ref params) => {
+                        if params.len() == 0 {
                             debug!("issue request now");
                             state.headers_done = true;
                         } else {
-                            for &(ref name, ref value) in rec.content.unwrap_params() {
+                            for &(ref name, ref value) in params {
                                 state.set_param(Vec::from(name.as_slice()), value.clone());
                             }
                         }
                     },
-                    _ => unimplemented!()
+                    // TODO
+                    _ => panic!("support for {:?} not implemented yet", rec.body),
                 }
             }
         };
 
-        // TODO
         future::ok(()).boxed()
     }
 }
