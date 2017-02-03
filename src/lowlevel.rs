@@ -207,7 +207,7 @@ impl Codec for FastcgiLowlevelCodec {
     }
 
     fn encode(&mut self, msg: Self::Out, buf: &mut Vec<u8>) -> io::Result<()> {
-        let (record_type, data) = match msg.body {
+        let (record_type, data): (RecordType, EasyBuf) = match msg.body {
             FastcgiRecordBody::Stdout(buf) => (RecordType::Stdout, buf),
             FastcgiRecordBody::Stderr(buf) => (RecordType::Stderr, buf),
             FastcgiRecordBody::EndRequest(end_body) => {

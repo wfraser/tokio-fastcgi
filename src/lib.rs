@@ -11,6 +11,6 @@ mod lowlevel;
 mod rawstruct;
 mod s11n;
 
-pub use highlevel::{FastcgiRequest, FastcgiResponse};
+pub use highlevel::{FastcgiServer, FastcgiRequest};
 pub use lowlevel::{FastcgiLowlevelCodec, FastcgiRecord, FastcgiRecordBody, BeginRequest, EndRequest};
 pub use s11n::{FASTCGI_VERSION, Role};
