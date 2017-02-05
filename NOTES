@@ -3,4 +3,18 @@ Project with some nice FCGI parsing code: https://github.com/mohtar/rust-fastcgi
 Tokio streaming protocols tutorial: https://tokio.rs/docs/going-deeper/streaming/
 
 [x] parse bytes as FastCGI records
-[ ] group FastCGI records into request header and body
+[x] group FastCGI records into request header
+[ ] after raising the request header, deliver body records through the request object
+[ ] handle response body records and pass them back to the socket
+[ ] close the socket when no requests are in flight
+
+Observations: implementing the control flow in a `filter_map` isn't going to work well because the
+return value of handling each record can't be a future, and for things like the body (stdin/data)
+records, it should be the result of doing a Sender::send(...), which is a
+`Future<Item = Sink, ...>`.
+
+Instead, `FastcgiServer` will probably have to implement `Stream<Item = FastcgiRequest>` manually,
+by having its `poll` call the underlying `Framed` stream's `poll` in a loop until the request
+headers are all received. Subsequent calls to `poll` will drive delivery of body records.
+
+Probably best to check what `Framed` does in its `poll`, since it is doing something similar.
