@@ -1,5 +1,7 @@
 //! These types prevent accidentally interpreting a network byte order integer as host byte order.
 
+#![allow(dead_code)]
+
 use byteorder::*;
 use std::mem::transmute;
 use std::slice;

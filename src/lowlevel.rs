@@ -211,11 +211,13 @@ impl Codec for FastcgiLowlevelCodec {
             FastcgiRecordBody::Stdout(buf) => (RecordType::Stdout, buf),
             FastcgiRecordBody::Stderr(buf) => (RecordType::Stderr, buf),
             FastcgiRecordBody::EndRequest(end_body) => {
-                let mut out = vec![0,0,0,0];
-                NetworkEndian::write_u32(out.as_mut_slice(), end_body.app_status);
-                out.push(end_body.protocol_status as u8);
-                out.extend_from_slice(&[0,0,0]);
-                (RecordType::EndRequest, EasyBuf::from(out))
+                let s11n_body = EndRequestBody {
+                    app_status: NetworkU32::new(end_body.app_status),
+                    protocol_status: end_body.protocol_status as u8,
+                    reserved: [0u8; 3],
+                };
+                let buf = EasyBuf::from(unsafe { as_bytes(&s11n_body) }.to_vec());
+                (RecordType::EndRequest, buf)
             },
             FastcgiRecordBody::GetValuesResult(values) => {
                 (RecordType::GetValuesResult, write_params(values))
