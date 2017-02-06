@@ -13,4 +13,4 @@ mod s11n;
 
 pub use highlevel::{FastcgiServer, FastcgiRequest};
 pub use lowlevel::{FastcgiLowlevelCodec, FastcgiRecord, FastcgiRecordBody, BeginRequest, EndRequest};
-pub use s11n::{FASTCGI_VERSION, Role};
+pub use s11n::{FASTCGI_VERSION, Role, ProtocolStatus};
