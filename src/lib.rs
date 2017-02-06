@@ -16,5 +16,6 @@ mod s11n;
 pub use highlevel::{FastcgiServer, FastcgiRequest};
 pub use hi::codec::FastcgiMultiplexedPipelinedCodec;
 pub use hi::proto::FastcgiProto;
+pub use hi::stream_process::StreamProcess;
 pub use lowlevel::{FastcgiLowlevelCodec, FastcgiRecord, FastcgiRecordBody, BeginRequest, EndRequest};
 pub use s11n::{FASTCGI_VERSION, Role, ProtocolStatus};
