@@ -11,10 +11,9 @@ extern crate tokio_uds;
 
 use futures::{future, stream, Future, Stream, Sink};
 use tokio_core::reactor::{Core, Handle};
-use tokio_core::io::{Io, Codec, EasyBuf, Framed};
+use tokio_core::io::EasyBuf;
 use tokio_proto::BindServer;
 use tokio_proto::streaming::{Message, Body};
-use tokio_proto::streaming::multiplex::*;
 use tokio_service::Service;
 use tokio_uds::*;
 
@@ -28,83 +27,6 @@ fn umask(mask: u32) -> u32 {
 
 //
 // Experimental code that will all go in the main crate once it's working:
-//
-
-//
-
-struct FastcgiMultiplexedPipelinedCodec {
-    inner: FastcgiLowlevelCodec,
-}
-
-impl Codec for FastcgiMultiplexedPipelinedCodec {
-    type In = Frame<FastcgiRecord, FastcgiRecord, io::Error>;
-    type Out = Frame<FastcgiRecord, FastcgiRecord, io::Error>;
-
-    fn decode(&mut self, buf: &mut EasyBuf) -> Result<Option<Self::In>, io::Error> {
-        match self.inner.decode(buf) {
-            Ok(Some(record)) => {
-                match record.body {
-                    FastcgiRecordBody::BeginRequest(_) => {
-                        debug!("got BeginRequest, sending header chunk");
-                        Ok(Some(Frame::Message {
-                            id: record.request_id as RequestId,
-                            message: record,
-                            body: true,
-                            solo: false
-                        }))
-                    },
-                    FastcgiRecordBody::Stdin(ref buf) if buf.len() == 0 => {
-                        debug!("stdin is done; sending empty body chunk");
-                        Ok(Some(Frame::Body {
-                            id: record.request_id as RequestId,
-                            chunk: None,
-                        }))
-                    },
-                    _ => {
-                        if let FastcgiRecordBody::Data(_) = record.body {
-                            warn!("FCGI_DATA not supported");
-                        }
-                        debug!("sending body chunk");
-                        Ok(Some(Frame::Body {
-                            id: record.request_id as RequestId,
-                            chunk: Some(record)
-                        }))
-                    }
-                }
-            },
-            Ok(None) => {
-                debug!("got None from underlying codec");
-                Ok(None)
-            },
-            Err(e) => {
-                error!("got error from underlying codec: {}", e);
-                Err(e)
-            }
-        }
-    }
-
-    fn encode(&mut self, msg: Self::Out, buf: &mut Vec<u8>) -> io::Result<()> {
-        match msg {
-            Frame::Message { id, message, body, solo } => {
-                debug!("encoding message: {} {:?} body={:?} solo={:?}", id, message, body, solo);
-                self.inner.encode(message, buf)
-            },
-            Frame::Body { id, chunk } => {
-                debug!("encoding body: {} {:?}", id, chunk);
-                if let Some(rec) = chunk {
-                    self.inner.encode(rec, buf)
-                } else {
-                    Ok(())
-                }
-            },
-            Frame::Error { id, error } => {
-                error!("error: {} {}", id, error);
-                Err(error)
-            }
-        }
-    }
-}
-
 //
 
 struct FastcgiService {
@@ -192,28 +114,6 @@ impl Service for FastcgiService {
         });
 
         future::ok(resp).boxed()
-    }
-}
-
-//
-
-struct FastcgiProto;
-
-impl<IO: Io + 'static> ServerProto<IO> for FastcgiProto {
-    type Request = FastcgiRecord;
-    type RequestBody = FastcgiRecord;
-    type Response = FastcgiRecord;
-    type ResponseBody = FastcgiRecord;
-    type Error = io::Error;
-
-    type Transport = Framed<IO, FastcgiMultiplexedPipelinedCodec>;
-    type BindTransport = Result<Self::Transport, io::Error>;
-
-    fn bind_transport(&self, io: IO) -> Self::BindTransport {
-        let codec = FastcgiMultiplexedPipelinedCodec {
-            inner: FastcgiLowlevelCodec,
-        };
-        Ok(io.framed(codec))
     }
 }
 

@@ -1,3 +1,4 @@
+#!/usr/bin/env python2.7
 import socket
 import fcgi_client
 
