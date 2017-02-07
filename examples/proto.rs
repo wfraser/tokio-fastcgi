@@ -67,17 +67,24 @@ impl<F> Service for FastcgiService<F>
         // Then pass the hash map and the remaining stream to the handler function,
         //  which returns a response with body stream.
 
-        let (id, input_record_stream): (u16, Body<FastcgiRecord, io::Error>) = match req {
+        let (id, begin_request, input_record_stream): (u16, BeginRequest, Body<FastcgiRecord, io::Error>) = match req {
+            Message::WithBody(
+                FastcgiRecord {
+                    request_id,
+                    body: FastcgiRecordBody::BeginRequest(begin_request)
+                },
+                body
+            ) => {
+                debug!("Got BeginRequest record: {:?}", begin_request);
+                (request_id, begin_request, body)
+            },
+            Message::WithBody(record, _body) => {
+                panic!("unexpected first record instead of BeginRequest: {:?}", record);
+            },
             Message::WithoutBody(_) => {
                 // All requests take up more than one record, so we're not using these.
                 panic!("unexpected WithoutBody response: {:?}", req);
             },
-            Message::WithBody(head, body) => {
-                debug!("Got request headers!");
-                debug!("head = {:?}", head);
-                debug!("body = {:?}", body);
-                (head.request_id, body)
-            }
         };
 
         let params_map = HashMap::<String, String>::new();
@@ -116,7 +123,7 @@ impl<F> Service for FastcgiService<F>
                     "X-Powered-By: tokio-fastcgi/0.1\r\n",
                     "Content-Type: text/plain\r\n",
                     "\r\n",
-                    "Hello from {:?}!"),
+                    "Hello from {:?}!\n"),
                 params["REQUEST_URI"]);
             let out = EasyBuf::from(Vec::from(data.as_bytes()));
 
@@ -130,7 +137,7 @@ impl<F> Service for FastcgiService<F>
                 body);
 
             handle.spawn_fn(move || {
-                let end_records = vec![
+                let mut end_records = vec![
                     Ok(Ok(FastcgiRecord {
                         request_id: id,
                         body: FastcgiRecordBody::Stdout(EasyBuf::new()),
@@ -147,6 +154,15 @@ impl<F> Service for FastcgiService<F>
                         })
                     })),
                 ];
+
+                if !begin_request.keep_connection {
+                    // HACK HACK HACK
+                    // The only way to drop the connection (as far as I can tell) is to send an
+                    // error here.
+                    end_records.push(Ok(Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "tokio-fastcgi forcing connection drop"))));
+                }
 
                 debug!("sending end records");
                 body_sender.send_all(stream::iter(end_records))
