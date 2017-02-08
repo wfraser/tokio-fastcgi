@@ -9,8 +9,8 @@ extern crate tokio_proto;
 extern crate tokio_service;
 extern crate tokio_uds;
 
-use futures::{future, stream, Future, Stream, Sink};
-use tokio_core::reactor::{Core, Handle};
+use futures::{future, stream, BoxFuture, Future, Stream, Sink};
+use tokio_core::reactor::{Core, Remote};
 use tokio_core::io::EasyBuf;
 use tokio_proto::BindServer;
 use tokio_proto::streaming::{Message, Body};
@@ -20,6 +20,7 @@ use tokio_uds::*;
 use std::collections::HashMap;
 use std::fs;
 use std::io;
+use std::os::unix::io::AsRawFd;
 
 fn umask(mask: u32) -> u32 {
     extern "system" { fn umask(mask: u32) -> u32; }
@@ -31,27 +32,34 @@ fn umask(mask: u32) -> u32 {
 //
 
 struct FastcgiService<F> {
-    core_handle: Handle,
+    reactor_handle: Remote,
     handler: F,
 }
 
 impl<F> FastcgiService<F>
-        where F: FnMut(HashMap<String, String>,
-                       Box<Stream<Item = FastcgiRecord, Error = io::Error>>)
-                -> Box<Future<Item = Message<FastcgiRecord, Body<FastcgiRecord, io::Error>>, Error = io::Error>>
+        where F: Fn(BoxFuture<FastcgiRequest, io::Error>)
+                -> BoxFuture<Message<FastcgiRecord, Body<FastcgiRecord, io::Error>>, io::Error>
 {
-    pub fn new(core_handle: Handle, handler: F) -> FastcgiService<F> {
+    pub fn new(reactor_handle: Remote, handler: F) -> FastcgiService<F> {
         FastcgiService {
-            core_handle: core_handle,
+            reactor_handle: reactor_handle,
             handler: handler,
         }
     }
 }
 
+pub struct FastcgiRequest {
+    pub id: u16,
+    pub role: Role,
+    pub keep_connection: bool,
+    pub params: HashMap<String, String>,
+    pub body: Body<FastcgiRecord, io::Error>,
+    pub reactor_handle: Remote,
+}
+
 impl<F> Service for FastcgiService<F>
-        where F: FnMut(HashMap<String, String>,
-                       Box<Stream<Item = FastcgiRecord, Error = io::Error>>)
-                -> Box<Future<Item = Message<FastcgiRecord, Body<FastcgiRecord, io::Error>>, Error = io::Error>>
+        where F: Fn(BoxFuture<FastcgiRequest, io::Error>)
+                -> BoxFuture<Message<FastcgiRecord, Body<FastcgiRecord, io::Error>>, io::Error>
 {
     type Request = Message<FastcgiRecord, Body<FastcgiRecord, io::Error>>;
     type Response = Message<FastcgiRecord, Body<FastcgiRecord, io::Error>>;
@@ -109,72 +117,21 @@ impl<F> Service for FastcgiService<F>
             }
         });
 
-        let handle = self.core_handle.clone();
+        let reactor_handle = self.reactor_handle.clone();
 
-        Box::new(stream_process.then(move |result| {
+        let req = stream_process.then(move |result| {
             let (body_record_stream, params) = result.unwrap();
-            debug!("making the response: {:?}", params);
+            Ok(FastcgiRequest {
+                id: id,
+                role: begin_request.role,
+                keep_connection: begin_request.keep_connection,
+                params: params,
+                body: body_record_stream,
+                reactor_handle: reactor_handle,
+            })
+        });
 
-            // Doesn't work because lifetimes...
-            //(self.handler)(params, body_record_stream.boxed())
-
-            let data = format!(
-                concat!(
-                    "X-Powered-By: tokio-fastcgi/0.1\r\n",
-                    "Content-Type: text/plain\r\n",
-                    "\r\n",
-                    "Hello from {:?}!\n"),
-                params["REQUEST_URI"]);
-            let out = EasyBuf::from(Vec::from(data.as_bytes()));
-
-            let (body_sender, body) = Body::pair();
-
-            let resp = Message::WithBody(
-                FastcgiRecord {
-                    request_id: id,
-                    body: FastcgiRecordBody::Stdout(out),
-                },
-                body);
-
-            handle.spawn_fn(move || {
-                let mut end_records = vec![
-                    Ok(Ok(FastcgiRecord {
-                        request_id: id,
-                        body: FastcgiRecordBody::Stdout(EasyBuf::new()),
-                    })),
-                    Ok(Ok(FastcgiRecord {
-                        request_id: id,
-                        body: FastcgiRecordBody::Stderr(EasyBuf::new()),
-                    })),
-                    Ok(Ok(FastcgiRecord {
-                        request_id: id,
-                        body: FastcgiRecordBody::EndRequest(EndRequest {
-                            app_status: 0,
-                            protocol_status: ProtocolStatus::RequestComplete,
-                        })
-                    })),
-                ];
-
-                if !begin_request.keep_connection {
-                    // HACK HACK HACK
-                    // The only way to drop the connection (as far as I can tell) is to send an
-                    // error here.
-                    end_records.push(Ok(Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "tokio-fastcgi forcing connection drop"))));
-                }
-
-                debug!("sending end records");
-                body_sender.send_all(stream::iter(end_records))
-                    .then(|_| {
-                        debug!("done sending end records");
-                        future::ok(())
-                    })
-            });
-
-            debug!("sending response");
-            Ok(resp)
-        }))
+        (self.handler)(req.boxed())
     }
 }
 
@@ -192,20 +149,86 @@ fn main() {
 
     let mut reactor = Core::new().unwrap();
     let handle = reactor.handle();
+    let remote = reactor.remote();
 
     umask(0);
     let listener = UnixListener::bind(filename, &reactor.handle()).expect("failed to bind socket");
 
     let srv = listener.incoming().for_each(move |(socket, _addr)| {
-        println!("{:#?}", socket);
+        println!("New connection: fd {}", socket.as_raw_fd());
 
-        let service = FastcgiService::new(handle.clone(), |_params, _body_record_stream| {
-            // TODO: this currently isn't actually run because of lifetime problems noted above.
-            future::ok(Message::WithoutBody(FastcgiRecord {
-                request_id: 0,
-                body: FastcgiRecordBody::Stdout(EasyBuf::new())
-            })).boxed()
+        let service = FastcgiService::new(remote.clone(), move |stream_processor| {
+            println!("got a request");
+            let resp_future = stream_processor.then(|result| {
+                let request = result.unwrap();
+                println!("making the response");
+
+                let data = format!(
+                    concat!(
+                        "X-Powered-By: tokio-fastcgi/0.1\r\n",
+                        "Content-Type: text/plain\r\n",
+                        "\r\n",
+                        "Hello from {:?}!\n"),
+                    request.params["REQUEST_URI"]);
+                let out = EasyBuf::from(Vec::from(data.as_bytes()));
+
+                let (body_sender, body) = Body::pair();
+
+                let resp = Message::WithBody(
+                    FastcgiRecord {
+                        request_id: request.id,
+                        body: FastcgiRecordBody::Stdout(out),
+                    },
+                    body);
+
+                // TODO: this logic needs to be moved into FastcgiService:
+
+                let id = request.id;
+                let keep_connection = request.keep_connection;
+
+                request.reactor_handle.spawn(move |_| {
+                    let mut end_records = vec![
+                        Ok(Ok(FastcgiRecord {
+                            request_id: id,
+                            body: FastcgiRecordBody::Stdout(EasyBuf::new()),
+                        })),
+                        Ok(Ok(FastcgiRecord {
+                            request_id: id,
+                            body: FastcgiRecordBody::Stderr(EasyBuf::new()),
+                        })),
+                        Ok(Ok(FastcgiRecord {
+                            request_id: id,
+                            body: FastcgiRecordBody::EndRequest(EndRequest {
+                                app_status: 0,
+                                protocol_status: ProtocolStatus::RequestComplete,
+                            })
+                        })),
+                    ];
+
+                    if !keep_connection {
+                        // HACK HACK HACK
+                        // The only way to drop the connection (as far as I can tell) is to send an
+                        // error here.
+                        end_records.push(Ok(Err(io::Error::new(
+                            io::ErrorKind::Other,
+                            "tokio-fastcgi forcing connection drop"))));
+                    }
+
+                    debug!("sending end records");
+                    body_sender.send_all(stream::iter(end_records))
+                        .then(|_| {
+                            debug!("done sending end records");
+                            future::ok(())
+                        })
+
+                    // TODO: end of logic that needs to be moved into FastcgiService
+                });
+
+                future::ok(resp)
+            });
+            Box::new(resp_future)
         });
+
         let proto = FastcgiProto;
         proto.bind_server(&handle, socket, service);
 
