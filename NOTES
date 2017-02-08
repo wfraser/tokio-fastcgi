@@ -18,3 +18,24 @@ by having its `poll` call the underlying `Framed` stream's `poll` in a loop unti
 headers are all received. Subsequent calls to `poll` will drive delivery of body records.
 
 Probably best to check what `Framed` does in its `poll`, since it is doing something similar.
+
+---
+
+Update 2017-02-07: I have the last 3 bullet points implemented in a hacky way now at least, using
+tokio-proto again.
+
+The major pain points now are:
+
+- No way (as far as I can tell) to indicate that tokio-proto should close the connection, so I have
+  to raise an error to do this.
+- Because future combinators all take a FnOnce, I can't have the main request logic wrapped up in
+  a nice function that just takes the request and makes a result (or result future); instead, they
+  have to be this ugly thing that takes a request *future* and combines with it to produce the
+  result future. Yuck. Maybe if I encapsulate the request logic into a struct or something...
+
+Remaining work to be done on this iteration:
+[ ] Move the end-records logic out of the request handler and into the FastcgiService::call
+    function.
+[ ] Make a general FastcgiResponse struct for holding headers and a body stream (probably just a
+    string for initial prototype) - probably necessary for the point above too.
+[ ] Clean up the code and move it into the crate proper.
