@@ -1,7 +1,7 @@
 
-FastCGI spec: https://github.com/Gedweb/rust-gfcgi/blob/master/doc/fcgi-spec.md
-Project with some nice FCGI parsing code: https://github.com/mohtar/rust-fastcgi
-Tokio streaming protocols tutorial: https://tokio.rs/docs/going-deeper/streaming/
+- FastCGI spec: https://github.com/Gedweb/rust-gfcgi/blob/master/doc/fcgi-spec.md
+- Project with some nice FCGI parsing code: https://github.com/mohtar/rust-fastcgi
+- Tokio streaming protocols tutorial: https://tokio.rs/docs/going-deeper/streaming/
 
 - [x] parse bytes as FastCGI records
 - [x] group FastCGI records into request header
