@@ -119,8 +119,7 @@ impl<F> Service for FastcgiService<F>
 
         let reactor_handle = self.reactor_handle.clone();
 
-        let req = stream_process.then(move |result| {
-            let (body_record_stream, params) = result.unwrap();
+        let request_future = stream_process.and_then(move |(body_record_stream, params)| {
             Ok(FastcgiRequest {
                 id: id,
                 role: begin_request.role,
@@ -131,7 +130,7 @@ impl<F> Service for FastcgiService<F>
             })
         });
 
-        (self.handler)(req.boxed())
+        (self.handler)(request_future.boxed())
     }
 }
 
@@ -159,8 +158,7 @@ fn main() {
 
         let service = FastcgiService::new(remote.clone(), move |stream_processor| {
             println!("got a request");
-            let resp_future = stream_processor.then(|result| {
-                let request = result.unwrap();
+            let resp_future = stream_processor.and_then(|request| {
                 println!("making the response");
 
                 let data = format!(
