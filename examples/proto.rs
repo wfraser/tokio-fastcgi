@@ -11,7 +11,7 @@ extern crate tokio_uds;
 
 use futures::{future, stream, BoxFuture, Future, Stream, Sink};
 use tokio_core::reactor::{Core, Remote};
-use tokio_core::io::EasyBuf;
+use tokio_core::io::{EasyBuf, EasyBufMut};
 use tokio_proto::BindServer;
 use tokio_proto::streaming::{Message, Body};
 use tokio_service::Service;
@@ -57,7 +57,16 @@ pub struct FastcgiRequest {
 
 pub struct FastcgiResponse {
     pub headers: HashMap<String, String>,
-    pub body: String, // TODO: change this to be a channel
+    pub body: Vec<u8>, // TODO: change this to be a channel
+}
+
+fn write_headers(buf: &mut EasyBufMut, headers: &HashMap<String, String>) {
+    for (ref key, ref value) in headers {
+        buf.extend_from_slice(key.as_bytes());
+        buf.extend_from_slice(b": ");
+        buf.extend_from_slice(value.as_bytes());
+        buf.extend_from_slice(b"\r\n");
+    }
 }
 
 impl<F> Service for FastcgiService<F>
@@ -134,7 +143,13 @@ impl<F> Service for FastcgiService<F>
 
         Box::new((self.handler)(request_future.boxed())
             .and_then(move |response| {
-                let out = EasyBuf::from(Vec::from(response.body.as_bytes()));
+                let mut out = EasyBuf::new();
+                {
+                    let mut buf_mut = out.get_mut();
+                    write_headers(&mut buf_mut, &response.headers);
+                    buf_mut.extend_from_slice(b"\r\n");
+                    buf_mut.extend_from_slice(response.body.as_slice());
+                }
 
                 let (body_sender, body) = Body::pair();
 
@@ -213,13 +228,7 @@ fn main() {
             let resp_future = stream_processor.and_then(|request| {
                 println!("making the response");
 
-                let data = format!(
-                    concat!(
-                        "X-Powered-By: tokio-fastcgi/0.1\r\n",
-                        "Content-Type: text/plain\r\n",
-                        "\r\n",
-                        "Hello from {:?}!\n"),
-                    request.params["REQUEST_URI"]);
+                let data = format!("Hello from {:?}!\n", request.params["REQUEST_URI"]);
 
                 let mut headers = HashMap::<String, String>::new();
                 headers.insert("X-Powered-By".to_owned(), "tokio_fastcgi/0.1".to_owned());
@@ -227,7 +236,7 @@ fn main() {
 
                 Box::new(future::ok(FastcgiResponse {
                     headers: headers,
-                    body: data
+                    body: data.into_bytes(),
                 }))
             });
             Box::new(resp_future)
