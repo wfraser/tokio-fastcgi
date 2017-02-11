@@ -56,8 +56,21 @@ pub struct FastcgiRequest {
 }
 
 pub struct FastcgiResponse {
-    pub headers: HashMap<String, String>,
     pub body: Vec<u8>, // TODO: change this to be a channel
+    headers: HashMap<String, String>,
+}
+
+impl FastcgiResponse {
+    pub fn new() -> FastcgiResponse {
+        FastcgiResponse {
+            body: vec![],
+            headers: HashMap::new(),
+        }
+    }
+
+    pub fn header<K: Into<String>, V: Into<String>>(&mut self, name: K, value: V) {
+        self.headers.insert(name.into(), value.into());
+    }
 }
 
 fn write_headers(buf: &mut EasyBufMut, headers: &HashMap<String, String>) {
@@ -228,16 +241,14 @@ fn main() {
             let resp_future = stream_processor.and_then(|request| {
                 println!("making the response");
 
-                let data = format!("Hello from {:?}!\n", request.params["REQUEST_URI"]);
+                let mut response = FastcgiResponse::new();
+                response.header("X-Powered-By", "tokio_fastcgi/0.1");
+                response.header("Content-Type", "text/plain");
 
-                let mut headers = HashMap::<String, String>::new();
-                headers.insert("X-Powered-By".to_owned(), "tokio_fastcgi/0.1".to_owned());
-                headers.insert("Content-Type".to_owned(), "text/plain".to_owned());
+                let body = format!("Hello from {:?}!\n", request.params["REQUEST_URI"]);
+                response.body.append(&mut body.into_bytes());
 
-                Box::new(future::ok(FastcgiResponse {
-                    headers: headers,
-                    body: data.into_bytes(),
-                }))
+                Box::new(future::ok(response))
             });
             Box::new(resp_future)
         });
