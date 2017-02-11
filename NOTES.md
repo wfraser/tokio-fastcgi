@@ -35,8 +35,9 @@ The major pain points now are:
   result future. Yuck. Maybe if I encapsulate the request logic into a struct or something...
 
 Remaining work to be done on this iteration:
-- [ ] Move the end-records logic out of the request handler and into the `FastcgiService::call`
+- [x] Move the end-records logic out of the request handler and into the `FastcgiService::call`
       function.
-- [ ] Make a general FastcgiResponse struct for holding headers and a body stream (probably just a
+- [x] Make a general FastcgiResponse struct for holding headers and a body stream (probably just a
       string for initial prototype) - probably necessary for the point above too.
+- [ ] Try making the response body be a channel / stream.
 - [ ] Clean up the code and move it into the crate proper.
