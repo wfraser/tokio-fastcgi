@@ -5,27 +5,11 @@
 
 - [x] parse bytes as FastCGI records
 - [x] group FastCGI records into request header
-- [ ] after raising the request header, deliver body records through the request object
-- [ ] handle response body records and pass them back to the socket
-- [ ] close the socket when no requests are in flight
+- [x] after raising the request header, deliver body records through the request object
+- [x] handle response body records and pass them back to the socket
+- [x] close the socket when no requests are in flight
 
-Observations: implementing the control flow in a `filter_map` isn't going to work well because the
-return value of handling each record can't be a future, and for things like the body (stdin/data)
-records, it should be the result of doing a Sender::send(...), which is a
-`Future<Item = Sink, ...>`.
-
-Instead, `FastcgiServer` will probably have to implement `Stream<Item = FastcgiRequest>` manually,
-by having its `poll` call the underlying `Framed` stream's `poll` in a loop until the request
-headers are all received. Subsequent calls to `poll` will drive delivery of body records.
-
-Probably best to check what `Framed` does in its `poll`, since it is doing something similar.
-
----
-
-Update 2017-02-07: I have the last 3 bullet points implemented in a hacky way now at least, using
-tokio-proto again.
-
-The major pain points now are:
+Now that these are done, the major pain points now are:
 
 - No way (as far as I can tell) to indicate that tokio-proto should close the connection, so I have
   to raise an error to do this.
@@ -40,4 +24,4 @@ Remaining work to be done on this iteration:
 - [x] Make a general FastcgiResponse struct for holding headers and a body stream (probably just a
       string for initial prototype) - probably necessary for the point above too.
 - [ ] Try making the response body be a channel / stream.
-- [ ] Clean up the code and move it into the crate proper.
+- [x] Clean up the code and move it into the crate proper.
