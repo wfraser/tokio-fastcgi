@@ -14,6 +14,7 @@ mod rawstruct;
 mod s11n;
 
 pub use hi::codec::FastcgiMultiplexedPipelinedCodec;
+pub use hi::handler::FastcgiRequestHandler;
 pub use hi::proto::FastcgiProto;
 pub use hi::service::{FastcgiRequest, FastcgiResponse, FastcgiService};
 pub use hi::stream_process::StreamProcess;

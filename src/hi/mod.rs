@@ -1,4 +1,5 @@
 pub mod codec;
+pub mod handler;
 pub mod proto;
 pub mod service;
 pub mod stream_process;

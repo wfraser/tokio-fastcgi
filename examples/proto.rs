@@ -9,7 +9,7 @@ extern crate tokio_proto;
 extern crate tokio_service;
 extern crate tokio_uds;
 
-use futures::{future, Future, Stream};
+use futures::{future, BoxFuture, Future, Stream};
 use tokio_core::reactor::Core;
 use tokio_proto::BindServer;
 use tokio_uds::*;
@@ -21,6 +21,27 @@ use std::os::unix::io::AsRawFd;
 fn umask(mask: u32) -> u32 {
     extern "system" { fn umask(mask: u32) -> u32; }
     unsafe { umask(mask) }
+}
+
+struct HelloHandler;
+
+impl FastcgiRequestHandler for HelloHandler {
+    fn call(&self, request_future: BoxFuture<FastcgiRequest, io::Error>)
+            -> BoxFuture<FastcgiResponse, io::Error>
+    {
+        Box::new(request_future.and_then(move |request| {
+            println!("making the response");
+
+            let mut response = FastcgiResponse::new();
+            response.header("X-Powered-By", "tokio_fastcgi/0.1");
+            response.header("Content-Type", "text/plain");
+
+            let body = format!("Hello from {:?}\n", request.params["REQUEST_URI"]);
+            response.body.append(&mut body.into_bytes());
+
+            Box::new(future::ok(response))
+        }))
+    }
 }
 
 fn main() {
@@ -40,25 +61,10 @@ fn main() {
     umask(0);
     let listener = UnixListener::bind(filename, &reactor.handle()).expect("failed to bind socket");
 
-    let srv = listener.incoming().for_each(move |(socket, _addr)| {
+    let srv = listener.incoming().for_each(|(socket, _addr)| {
         println!("New connection: fd {}", socket.as_raw_fd());
 
-        let service = FastcgiService::new(remote.clone(), move |stream_processor| {
-            println!("got a request");
-            let resp_future = stream_processor.and_then(|request| {
-                println!("making the response");
-
-                let mut response = FastcgiResponse::new();
-                response.header("X-Powered-By", "tokio_fastcgi/0.1");
-                response.header("Content-Type", "text/plain");
-
-                let body = format!("Hello from {:?}!\n", request.params["REQUEST_URI"]);
-                response.body.append(&mut body.into_bytes());
-
-                Box::new(future::ok(response))
-            });
-            Box::new(resp_future)
-        });
+        let service = FastcgiService::new(remote.clone(), HelloHandler);
 
         let proto = FastcgiProto;
         proto.bind_server(&handle, socket, service);

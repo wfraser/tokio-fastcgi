@@ -1,24 +1,23 @@
 use super::super::*;
 
-use futures::{future, stream, BoxFuture, Future, Sink};
+use futures::{future, stream, Future, Sink};
 use tokio_core::reactor::Remote;
 use tokio_core::io::EasyBuf;
 use tokio_proto::streaming::{Message, Body};
 use tokio_service::Service;
 
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::io;
+use std::marker::PhantomData;
 
-pub struct FastcgiService<F> {
+pub struct FastcgiService<H: FastcgiRequestHandler> {
     reactor_handle: Remote,
-    handler: F,
+    handler: H,
 }
 
-impl<F> FastcgiService<F>
-        where F: Fn(BoxFuture<FastcgiRequest, io::Error>)
-                -> BoxFuture<FastcgiResponse, io::Error>
-{
-    pub fn new(reactor_handle: Remote, handler: F) -> FastcgiService<F> {
+impl<H: FastcgiRequestHandler> FastcgiService<H> {
+    pub fn new(reactor_handle: Remote, handler: H) -> FastcgiService<H> {
         FastcgiService {
             reactor_handle: reactor_handle,
             handler: handler,
@@ -30,10 +29,7 @@ fn invalid_data<T: Into<String>>(msg: T) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, msg.into())
 }
 
-impl<F> Service for FastcgiService<F>
-        where F: Fn(BoxFuture<FastcgiRequest, io::Error>)
-                -> BoxFuture<FastcgiResponse, io::Error>
-{
+impl<H: FastcgiRequestHandler> Service for FastcgiService<H> {
     type Request = Message<FastcgiRecord, Body<FastcgiRecord, io::Error>>;
     type Response = Message<FastcgiRecord, Body<FastcgiRecord, io::Error>>;
     type Error = io::Error;
@@ -113,7 +109,7 @@ impl<F> Service for FastcgiService<F>
             })
         });
 
-        let response_future = (self.handler)(request_future.boxed())
+        let response_future = self.handler.borrow().call(request_future.boxed())
             .and_then(move |response| {
 
                 // TODO: need to split the response into multiple records if it is greater than
