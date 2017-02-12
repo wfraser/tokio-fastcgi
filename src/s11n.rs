@@ -5,9 +5,9 @@ use super::endian::*;
 pub const FASTCGI_VERSION: u8 = 1;
 
 // Variables for the RecordType::GetValues and GetValuesResult records.
-pub const FCGI_MAX_CONNS: &'static str = "FCGI_MAX_CONNS";
-pub const FCGI_MAX_REQS: &'static str = "FCGI_MAX_REQS";
-pub const FCGI_MPXS_CONNS: &'static str = "FCGI_MPXS_CONNS";
+//pub const FCGI_MAX_CONNS: &'static str = "FCGI_MAX_CONNS";
+//pub const FCGI_MAX_REQS: &'static str = "FCGI_MAX_REQS";
+//pub const FCGI_MPXS_CONNS: &'static str = "FCGI_MPXS_CONNS";
 
 enum_from_primitive! {
     #[repr(u8)]
