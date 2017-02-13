@@ -110,6 +110,8 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
 
             info!("remote {:?} -> request for {:?}", param!("REMOTE_ADDR"), param!("REQUEST_URI"));
 
+            // TODO: instead of giving a stream of body records, give a stream of buffers.
+
             Ok(FastcgiRequest {
                 role: begin_request.role,
                 params: params,

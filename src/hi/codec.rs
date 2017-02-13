@@ -43,6 +43,7 @@ impl Codec for FastcgiMultiplexedPipelinedCodec {
                     },
                     _ => {
                         if let FastcgiRecordBody::Data(_) = record.body {
+                            // This is only used by the "Filter" role.
                             warn!("FCGI_DATA not supported");
                         }
                         debug!("sending body chunk");
