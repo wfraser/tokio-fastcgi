@@ -232,6 +232,12 @@ impl Codec for FastcgiLowlevelCodec {
             }
         };
 
+        if data.len() > 0xFFFF {
+            let msg = format!("{:?} record is too long: {}", record_type, data.len());
+            error!("{}", msg);
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, msg));
+        }
+
         let header = FastcgiRecordHeader {
             version: FASTCGI_VERSION,
             record_type: record_type as u8,
