@@ -13,10 +13,6 @@ Now that these are done, the major pain points now are:
 
 - No way (as far as I can tell) to indicate that tokio-proto should close the connection, so I have
   to raise an error to do this.
-- Because future combinators all take a `FnOnce`, I can't have the main request logic wrapped up in
-  a nice function that just takes the request and makes a result (or result future); instead, they
-  have to be this ugly thing that takes a request *future* and combines with it to produce the
-  result future. Yuck. Maybe if I encapsulate the request logic into a struct or something...
 
 Remaining work to be done on this iteration:
 - [x] Move the end-records logic out of the request handler and into the `FastcgiService::call`
