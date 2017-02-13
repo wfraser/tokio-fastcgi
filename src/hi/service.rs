@@ -101,6 +101,16 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
         let keep_connection = begin_request.keep_connection;
 
         let request_future = stream_process.and_then(move |(body_record_stream, params)| {
+            macro_rules! param {
+                ($name:expr) => {
+                    params.get($name)
+                          .map(|s| s.as_str())
+                          .unwrap_or(concat!("<no ", $name, " set!>"))
+                }
+            }
+
+            info!("remote {:?} -> request for {:?}", param!("REMOTE_ADDR"), param!("REQUEST_URI"));
+
             Ok(FastcgiRequest {
                 role: begin_request.role,
                 params: params,

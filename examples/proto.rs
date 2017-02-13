@@ -42,8 +42,7 @@ impl FastcgiRequestHandler for HelloHandler {
         println!("making the response");
 
         let mut response = FastcgiResponse::new();
-        response.header("X-Powered-By", "tokio_fastcgi/0.1");
-        response.header("Content-Type", "text/plain");
+        response.set_header("Content-Type", "text/plain");
 
         let count = self.request_count.fetch_add(1, Ordering::SeqCst);
 
