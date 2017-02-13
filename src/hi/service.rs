@@ -203,13 +203,21 @@ pub struct FastcgiResponse {
 
 impl FastcgiResponse {
     pub fn new() -> FastcgiResponse {
+        let mut headers = HashMap::new();
+        headers.insert(
+            "X-Powered-By".to_owned(),
+            concat!("tokio-fastcgi/", env!("CARGO_PKG_VERSION")).to_owned());
         FastcgiResponse {
             body: Vec::new(),
-            headers: HashMap::new(),
+            headers: headers,
         }
     }
 
-    pub fn header<K: Into<String>, V: Into<String>>(&mut self, name: K, value: V) {
+    pub fn set_header<K: Into<String>, V: Into<String>>(&mut self, name: K, value: V) {
         self.headers.insert(name.into(), value.into());
+    }
+
+    pub fn clear_header(&mut self, name: &str) {
+        self.headers.remove(name);
     }
 }
