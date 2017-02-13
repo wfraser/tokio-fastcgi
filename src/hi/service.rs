@@ -98,7 +98,6 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
         );
 
         let reactor_handle = self.reactor_handle.clone();
-        let keep_connection = begin_request.keep_connection;
 
         let request_future = stream_process.and_then(move |(body_record_stream, params)| {
             macro_rules! param {
@@ -149,7 +148,7 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
                     body);
 
                 reactor_handle.spawn(move |_| {
-                    let mut end_records = vec![
+                    let end_records = vec![
                         Ok(Ok(FastcgiRecord {
                             request_id: id,
                             body: FastcgiRecordBody::Stdout(EasyBuf::new()),
@@ -166,15 +165,6 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
                             })
                         })),
                     ];
-
-                    if !keep_connection {
-                        // HACK HACK HACK
-                        // The only way to drop the connection (as far as I can tell) is to send an
-                        // error here.
-                        end_records.push(Ok(Err(io::Error::new(
-                            io::ErrorKind::Other,
-                            "tokio-fastcgi forcing connection drop"))));
-                    }
 
                     debug!("sending end records");
                     body_sender.send_all(stream::iter(end_records))
