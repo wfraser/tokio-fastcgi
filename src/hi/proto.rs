@@ -5,6 +5,7 @@ use tokio_proto::streaming::multiplex::*;
 
 use std::io;
 
+#[derive(Debug, Default)]
 pub struct FastcgiProto;
 
 impl<IO: Io + 'static> ServerProto<IO> for FastcgiProto {

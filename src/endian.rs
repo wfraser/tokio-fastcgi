@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 
 use byteorder::*;
-use std::mem::transmute;
+use std::mem::size_of;
 use std::slice;
 
 #[derive(Clone, Copy, Debug)]
@@ -17,8 +17,8 @@ impl NetworkU16 {
         NetworkEndian::write_u16(
             unsafe {
                 slice::from_raw_parts_mut(
-                    transmute(&mut out),
-                    2
+                    &mut out as *mut u16 as *mut u8,
+                    size_of::<u16>()
                 )
             },
             input
@@ -32,8 +32,8 @@ impl NetworkU16 {
         NetworkEndian::read_u16(
             unsafe {
                 slice::from_raw_parts(
-                    transmute(&self.data),
-                    2
+                    &self.data as *const u16 as *const u8,
+                    size_of::<u16>()
                 )
             }
         )
@@ -52,8 +52,8 @@ impl NetworkU32 {
         NetworkEndian::write_u32(
             unsafe {
                 slice::from_raw_parts_mut(
-                    transmute(&mut out),
-                    4
+                    &mut out as *mut u32 as *mut u8,
+                    size_of::<u32>()
                 )
             },
             input
@@ -67,8 +67,8 @@ impl NetworkU32 {
         NetworkEndian::read_u32(
             unsafe {
                 slice::from_raw_parts(
-                    transmute(&self.data),
-                    4
+                    &self.data as *const u32 as *const u8,
+                    size_of::<u32>()
                 )
             }
         )

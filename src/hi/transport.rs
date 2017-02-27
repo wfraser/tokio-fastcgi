@@ -9,7 +9,7 @@ use std::io;
 
 /// Manages a FastCGI connection, by binding a codec that translates bytes into multiplexed FastCGI
 /// streams. This also closes the connection when no streams are active (unless one of them
-/// specifies the FCGI_KEEP_CONN bit in the BeginRequest record).
+/// specifies the `FCGI_KEEP_CONN` bit in the `BeginRequest` record).
 pub struct FastcgiTransport<IO: Io + 'static> {
     inner: Option<Framed<IO, FastcgiMultiplexedPipelinedCodec>>,
     in_flight: Requests,
@@ -49,7 +49,7 @@ impl Requests {
 
 impl<IO: Io + 'static> FastcgiTransport<IO> {
     pub fn new(io: IO) -> FastcgiTransport<IO> {
-        let codec = FastcgiMultiplexedPipelinedCodec::new();
+        let codec = FastcgiMultiplexedPipelinedCodec::default();
         FastcgiTransport {
             inner: Some(io.framed(codec)),
             in_flight: Requests::new(),
@@ -77,8 +77,8 @@ impl<IO: Io + 'static> Stream for FastcgiTransport<IO> {
 
                 let id = match result {
                     Ok(Async::Ready(Some(ref frame))) => {
-                        match frame {
-                            &Frame::Message { id, ref message, .. } => {
+                        match *frame {
+                            Frame::Message { id, ref message, .. } => {
                                 if let FastcgiRecordBody::BeginRequest(ref begin_request) = message.body {
                                     if begin_request.keep_connection {
                                         debug!("request has FCGI_KEEP_CONN set");
@@ -87,7 +87,7 @@ impl<IO: Io + 'static> Stream for FastcgiTransport<IO> {
                                 }
                                 Some(id)
                             }
-                            &Frame::Body { id, chunk: Some(_) } => Some(id),
+                            Frame::Body { id, chunk: Some(_) } => Some(id),
                             _ => None,
                         }
                     },

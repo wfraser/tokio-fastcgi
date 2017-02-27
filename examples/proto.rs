@@ -3,7 +3,6 @@ use tokio_fastcgi::*;
 
 extern crate env_logger;
 extern crate futures;
-#[macro_use] extern crate log;
 extern crate tokio_core;
 extern crate tokio_proto;
 extern crate tokio_uds;
@@ -40,7 +39,7 @@ impl FastcgiRequestHandler for HelloHandler {
     fn call(&self, request: FastcgiRequest) -> BoxFuture<FastcgiResponse, io::Error> {
         println!("making the response");
 
-        let mut response = FastcgiResponse::new();
+        let mut response = FastcgiResponse::default();
         response.set_header("Content-Type", "text/plain");
 
         let count = self.request_count.fetch_add(1, Ordering::SeqCst);
@@ -76,7 +75,7 @@ fn main() {
 
         let service = FastcgiService::new(remote.clone(), handler.clone());
 
-        let proto = FastcgiProto;
+        let proto = FastcgiProto::default();
         proto.bind_server(&handle, socket, service);
 
         Ok(())

@@ -5,16 +5,9 @@ use tokio_proto::streaming::multiplex::*;
 
 use std::io;
 
+#[derive(Debug, Default)]
 pub struct FastcgiMultiplexedPipelinedCodec {
     inner: FastcgiLowlevelCodec,
-}
-
-impl FastcgiMultiplexedPipelinedCodec {
-    pub fn new() -> FastcgiMultiplexedPipelinedCodec {
-        FastcgiMultiplexedPipelinedCodec {
-            inner: FastcgiLowlevelCodec,
-        }
-    }
 }
 
 impl Codec for FastcgiMultiplexedPipelinedCodec {

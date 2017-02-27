@@ -3,7 +3,7 @@ use std::mem::{size_of, transmute};
 
 pub unsafe fn as_bytes<T: Copy>(x: &T) -> &[u8] {
     slice::from_raw_parts(
-        transmute(x),
+        x as *const T as *const u8,
         size_of::<T>()
     )
 }

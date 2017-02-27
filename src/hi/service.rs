@@ -193,8 +193,8 @@ pub struct FastcgiResponse {
     headers: HashMap<String, String>,
 }
 
-impl FastcgiResponse {
-    pub fn new() -> FastcgiResponse {
+impl Default for FastcgiResponse {
+    fn default() -> Self {
         let mut headers = HashMap::new();
         headers.insert(
             "X-Powered-By".to_owned(),
@@ -204,7 +204,9 @@ impl FastcgiResponse {
             headers: headers,
         }
     }
+}
 
+impl FastcgiResponse {
     pub fn set_header<K: Into<String>, V: Into<String>>(&mut self, name: K, value: V) {
         self.headers.insert(name.into(), value.into());
     }

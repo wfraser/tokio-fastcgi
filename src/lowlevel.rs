@@ -43,6 +43,7 @@ pub struct EndRequest {
     pub protocol_status: ProtocolStatus,
 }
 
+#[derive(Debug, Default)]
 pub struct FastcgiLowlevelCodec;
 
 fn read_header(buf: &mut EasyBuf) -> Option<FastcgiRecordHeader> {
@@ -96,7 +97,7 @@ fn write_params(params: Vec<(Vec<u8>, Vec<u8>)>) -> EasyBuf {
     let mut out = EasyBuf::new();
     {
         let mut out = out.get_mut();
-        for (name, value) in params.into_iter() {
+        for (name, value) in params {
             write_len(&mut out, name.len());
             write_len(&mut out, value.len());
             out.extend_from_slice(name.as_slice());
