@@ -24,6 +24,7 @@ Remaining work to be done on this iteration:
 - [x] Make a general FastcgiResponse struct for holding headers and a body stream (probably just a
       string for initial prototype) - probably necessary for the point above too.
 - [x] Clean up the code and move it into the crate proper.
-- [ ] Try making the response body be a channel / stream.
-- [ ] Relatedly, make sure that responses > 65535 bytes are sent correctly.
+- [x] Try making the response body be a channel / stream.
+- [x] Relatedly, make sure that responses > 65535 bytes are sent correctly.
 - [ ] Stream in the request body as EasyBufs instead of FastcgiRecords.
+- [ ] Add some way to write to stderr.
