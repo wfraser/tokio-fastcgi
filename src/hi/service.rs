@@ -136,9 +136,12 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
                     = Box::new(
                         handler.call(request)
                             .into_stream()
-                            .filter(|_| false)
-                            .map(|_| None)
-                            );
+                            .filter(|&()| {
+                                debug!("handler completed");
+                                 false
+                            })
+                            .map(|_| None) // never called; just for changing the type.
+                    );
 
                 // We also have `response_receiver`, which is a stream of `FastcgiRecord`,
                 // which are the records the handler generates as it runs.
@@ -188,9 +191,11 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
                                 // TODO: what if `handle()` returns `None`?
                                 reactor_handle.handle().unwrap().spawn(
                                     body_sender.send_all(records)
-                                        .then(|_| {
+                                        .map_err(|e| {
+                                            error!("error sending body response records: {}", e);
+                                        })
+                                        .map(|(_sink, _stream)| {
                                             debug!("done sending response body records");
-                                            future::ok(())
                                         }));
 
                                 // Start the response!
