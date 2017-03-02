@@ -158,27 +158,30 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
                     .map(move |(maybe_record, record_stream)| {
                         debug!("merged streams yielded something: {:?}", maybe_record);
 
-                        match maybe_record {
-                            Some(Some(record)) => {
-                                debug!("first record received");
+                        let end_records = vec![
+                            Ok(FastcgiRecord {
+                                request_id: id,
+                                body: FastcgiRecordBody::Stdout(EasyBuf::new()),
+                            }),
+                            Ok(FastcgiRecord {
+                                request_id: id,
+                                body: FastcgiRecordBody::Stderr(EasyBuf::new()),
+                            }),
+                            Ok(FastcgiRecord {
+                                request_id: id,
+                                body: FastcgiRecordBody::EndRequest(EndRequest {
+                                    app_status: 0,
+                                    protocol_status: ProtocolStatus::RequestComplete,
+                                })
+                            }),
+                        ];
 
-                                let end_records = vec![
-                                    Ok(FastcgiRecord {
-                                        request_id: id,
-                                        body: FastcgiRecordBody::Stdout(EasyBuf::new()),
-                                    }),
-                                    Ok(FastcgiRecord {
-                                        request_id: id,
-                                        body: FastcgiRecordBody::Stderr(EasyBuf::new()),
-                                    }),
-                                    Ok(FastcgiRecord {
-                                        request_id: id,
-                                        body: FastcgiRecordBody::EndRequest(EndRequest {
-                                            app_status: 0,
-                                            protocol_status: ProtocolStatus::RequestComplete,
-                                        })
-                                    }),
-                                ];
+                        // TODO: what if `handle()` returns `None`?
+                        let reactor_handle = reactor_handle.handle().unwrap();
+
+                        match maybe_record {
+                            Some(Some(first_record)) => {
+                                debug!("first record received");
 
                                 let records = record_stream
                                     .map(|maybe_record| maybe_record.unwrap())
@@ -188,32 +191,42 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
                                 let (body_sender, body) = Body::<FastcgiRecord, io::Error>::pair();
 
                                 // Schedule a future to pump remaining records through to the body.
-                                // TODO: what if `handle()` returns `None`?
-                                reactor_handle.handle().unwrap().spawn(
+                                reactor_handle.spawn(
                                     body_sender.send_all(records)
                                         .map_err(|e| {
-                                            error!("error sending body response records: {}", e);
+                                            error!("error sending response body records: {}", e);
                                         })
                                         .map(|(_sink, _stream)| {
                                             debug!("done sending response body records");
                                         }));
 
                                 // Start the response!
-                                Message::WithBody(record, body)
+                                Message::WithBody(first_record, body)
                             },
                             None => {
                                 warn!("no response records received");
-                                // TODO: is it acceptable to skip the Stdout & Stderr records?
-                                Message::WithoutBody(
+
+                                let (body_sender, body) = Body::<FastcgiRecord, io::Error>::pair();
+
+                                reactor_handle.spawn(
+                                    body_sender.send_all(stream::iter(end_records).then(Ok))
+                                        .map_err(|e| {
+                                            error!("error sending response body records: {}", e);
+                                        })
+                                        .map(|(_sink, _stream)| {
+                                            debug!("done sending response body records");
+                                        }));
+
+                                Message::WithBody(
                                     FastcgiRecord {
                                         request_id: id,
-                                        body: FastcgiRecordBody::EndRequest(EndRequest {
-                                            app_status: 0,
-                                            protocol_status: ProtocolStatus::RequestComplete,
-                                        })
-                                    })
+                                        // Send a header-body separator (i.e. send zero headers).
+                                        body: FastcgiRecordBody::Stdout(
+                                            EasyBuf::from(b"\r\n".to_vec())),
+                                    },
+                                    body)
                             },
-                            Some(None) => panic!("this is never supposed to happen")
+                            Some(None) => unreachable!()
                         }
                     })
             });
