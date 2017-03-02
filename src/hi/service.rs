@@ -202,11 +202,15 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
                                 Message::WithBody(record, body)
                             },
                             None => {
-                                debug!("no record received");
+                                warn!("no response records received");
+                                // TODO: is it acceptable to skip the Stdout & Stderr records?
                                 Message::WithoutBody(
                                     FastcgiRecord {
                                         request_id: id,
-                                        body: FastcgiRecordBody::Stdout(EasyBuf::new())
+                                        body: FastcgiRecordBody::EndRequest(EndRequest {
+                                            app_status: 0,
+                                            protocol_status: ProtocolStatus::RequestComplete,
+                                        })
                                     })
                             },
                             Some(None) => panic!("this is never supposed to happen")
