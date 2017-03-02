@@ -47,6 +47,9 @@ impl FastcgiRequestHandler for HelloHandler {
                 println!("making the response");
                 let body = format!("Hello from {:?}: {}", request.params["REQUEST_URI"], count);
                 body_response.buffer.append(&mut body.into_bytes());
+                body_response.flush()
+            }).and_then(|mut body_response| {
+                body_response.buffer.extend_from_slice(b"\nHave a nice day!");
                 body_response.finish()
             })
             .boxed()

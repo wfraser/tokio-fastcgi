@@ -1,6 +1,6 @@
 use super::super::*;
 
-use futures::{future, stream, BoxFuture, Future, Sink, Stream};
+use futures::{future, stream, Future, Sink, Stream};
 use futures::sync::mpsc;
 use tokio_core::reactor::Remote;
 use tokio_core::io::EasyBuf;
