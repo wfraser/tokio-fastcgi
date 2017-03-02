@@ -158,48 +158,42 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
                         match maybe_record {
                             Some(Some(record)) => {
                                 debug!("first record received");
+
+                                let end_records = vec![
+                                    Ok(FastcgiRecord {
+                                        request_id: id,
+                                        body: FastcgiRecordBody::Stdout(EasyBuf::new()),
+                                    }),
+                                    Ok(FastcgiRecord {
+                                        request_id: id,
+                                        body: FastcgiRecordBody::Stderr(EasyBuf::new()),
+                                    }),
+                                    Ok(FastcgiRecord {
+                                        request_id: id,
+                                        body: FastcgiRecordBody::EndRequest(EndRequest {
+                                            app_status: 0,
+                                            protocol_status: ProtocolStatus::RequestComplete,
+                                        })
+                                    }),
+                                ];
+
+                                let records = record_stream
+                                    .map(|maybe_record| maybe_record.unwrap())
+                                    .chain(stream::iter(end_records))
+                                    .then(Ok);
+
                                 let (body_sender, body) = Body::<FastcgiRecord, io::Error>::pair();
 
-                                // pump remaining records through to the body
-                                reactor_handle.spawn(move |_| {
-                                    let end_records = vec![
-                                        Ok(FastcgiRecord {
-                                            request_id: id,
-                                            body: FastcgiRecordBody::Stdout(EasyBuf::new()),
-                                        }),
-                                        Ok(FastcgiRecord {
-                                            request_id: id,
-                                            body: FastcgiRecordBody::Stderr(EasyBuf::new()),
-                                        }),
-                                        Ok(FastcgiRecord {
-                                            request_id: id,
-                                            body: FastcgiRecordBody::EndRequest(EndRequest {
-                                                app_status: 0,
-                                                protocol_status: ProtocolStatus::RequestComplete,
-                                            })
-                                        }),
-                                    ];
-
-                                    // FIXME: this doesn't work because record_stream isn't `Send`.
-                                    /*
-                                    let records = record_stream
-                                        .map(|maybe_record| maybe_record.unwrap())
-                                        .chain(stream::iter(end_records))
-                                        .then(|result| Ok(result));
-                                    */
-
-                                    let records = stream::iter(end_records)
-                                        .then(Ok);
-
-                                    debug!("sending end records");
+                                // Schedule a future to pump remaining records through to the body.
+                                // TODO: what if `handle()` returns `None`?
+                                reactor_handle.handle().unwrap().spawn(
                                     body_sender.send_all(records)
                                         .then(|_| {
-                                            debug!("done sending end records");
+                                            debug!("done sending response body records");
                                             future::ok(())
-                                        })
-                                });
+                                        }));
 
-                                // Response!
+                                // Start the response!
                                 Message::WithBody(record, body)
                             },
                             None => {
