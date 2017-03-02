@@ -61,17 +61,19 @@ fn read_len(buf: &mut EasyBuf) -> usize {
     if first_byte < 0x80 {
         buf.drain_to(1).as_slice()[0] as usize
     } else {
-        NetworkEndian::read_u32(buf.drain_to(4).as_slice()) as usize
+        NetworkEndian::read_u32(buf.drain_to(4).as_slice()) as usize & !0x8000_0000
     }
 }
 
 fn write_len(buf: &mut EasyBufMut, len: usize) {
     if len < 0x80 {
         buf.push(len as u8);
-    } else {
+    } else if len < 0x8000_0000 {
         let mut bytes = [0u8; 4];
-        NetworkEndian::write_u32(bytes.as_mut(), len as u32);
+        NetworkEndian::write_u32(bytes.as_mut(), len as u32 | 0x8000_0000);
         buf.extend_from_slice(bytes.as_ref());
+    } else {
+        panic!("un-encodable name-value pair length: {:#x}", len);
     }
 }
 
