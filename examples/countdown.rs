@@ -34,6 +34,17 @@ impl FastcgiRequestHandler for CountdownHandler {
         headers_response.send_headers()
             .and_then(move |mut body_response| {
                 println!("beginning countdown from {}", start);
+
+                // Add a bunch of invisible characters to the output to prevent browsers from
+                // buffering the whole thing.
+                // U+FEFF works great because as a Zero-Width-Non-Breaking-Space it is almost
+                // totally invisible.
+                const PADDING_LEN: usize = 100;
+                body_response.buffer.reserve(PADDING_LEN * 3); // U+FEFF = 3 bytes in UTF-8
+                for _ in 0..PADDING_LEN {
+                    body_response.buffer.extend_from_slice("\u{FEFF}".as_bytes());
+                }
+
                 body_response.buffer.append(
                     &mut format!("Counting down from {}!\n", start).into_bytes());
                 body_response.flush()
