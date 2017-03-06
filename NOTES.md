@@ -26,5 +26,5 @@ Remaining work to be done on this iteration:
 - [x] Clean up the code and move it into the crate proper.
 - [x] Try making the response body be a channel / stream.
 - [x] Relatedly, make sure that responses > 65535 bytes are sent correctly.
-- [ ] Stream in the request body as EasyBufs instead of FastcgiRecords.
+- [x] Stream in the request body as EasyBufs instead of FastcgiRecords.
 - [ ] Add some way to write to stderr.

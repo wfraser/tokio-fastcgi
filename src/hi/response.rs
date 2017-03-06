@@ -1,6 +1,7 @@
 use super::super::*;
 
-use futures::{future, stream, BoxFuture, Future, Sink};
+use futures::{future, BoxFuture, Future, Sink};
+use futures::stream::{self, BoxStream, Stream};
 use futures::sync::mpsc;
 use tokio_core::io::EasyBuf;
 use tokio_proto::streaming::Body;
@@ -11,7 +12,7 @@ use std::io;
 pub struct FastcgiRequest {
     pub role: Role,
     pub params: HashMap<String, String>,
-    pub body: Body<FastcgiRecord, io::Error>, // TODO: instead of giving a stream of body records, give a stream of buffers.
+    pub body: BoxStream<EasyBuf, io::Error>,
     request_id: u16,
     sender: mpsc::Sender<FastcgiRecord>,
 }
@@ -25,10 +26,25 @@ impl FastcgiRequest {
         sender: mpsc::Sender<FastcgiRecord>,
         ) -> FastcgiRequest
     {
+        // The body stream is expected to consist only of Stdin records. Extract the buffers from
+        // these and give the handler a stream of those instead. Anything other than a Stdin record
+        // results in an error.
+        let buf_stream = body.and_then(|record| {
+            match record.body {
+                FastcgiRecordBody::Stdin(buf) => Ok(buf),
+                _ => {
+                    let msg = format!("unexpected request body record {:?}", record.body);
+                    error!("{}", msg);
+                    Err(io::Error::new(io::ErrorKind::InvalidData, msg))
+                }
+            }
+        }).take_while(|buf| Ok(buf.len() != 0)) // empty Stdin record signals the end.
+            .boxed();
+
         FastcgiRequest {
             role: role,
             params: params,
-            body: body,
+            body: buf_stream,
             request_id: request_id,
             sender: sender,
         }
