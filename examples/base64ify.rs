@@ -10,7 +10,7 @@ extern crate tokio_core;
 extern crate tokio_proto;
 extern crate tokio_uds;
 
-use futures::{BoxFuture, Future, Stream};
+use futures::{Future, Stream};
 use tokio_core::reactor::Core;
 use tokio_proto::BindServer;
 use tokio_uds::*;
@@ -71,7 +71,7 @@ fn write_base64(bytes: &[u8], out: &mut Vec<u8>) {
 struct Base64ifyHandler;
 
 impl FastcgiRequestHandler for Base64ifyHandler {
-    fn call(&self, request: FastcgiRequest) -> BoxFuture<(), io::Error> {
+    fn call(&self, request: FastcgiRequest) -> Box<Future<Item=(), Error=io::Error>> {
         let mut headers_response = request.response();
         headers_response.set_header("Content-Type", "text/plain");
 
@@ -85,7 +85,7 @@ impl FastcgiRequestHandler for Base64ifyHandler {
             partial: None,
         };
 
-        headers_response.send_headers()
+        Box::new(headers_response.send_headers()
             .and_then(move |body_response| {
                 request.body.fold(
                     (body_response, state),
@@ -98,10 +98,10 @@ impl FastcgiRequestHandler for Base64ifyHandler {
                     if let Some(mut partial) = state.partial.take() {
                         match partial.len() {
                             1 => {
-                                partial.extend_from_slice(input_buf.drain_to(2).as_slice());
+                                partial.extend_from_slice(&input_buf.split_to(2));
                             },
                             2 => {
-                                partial.extend_from_slice(input_buf.drain_to(1).as_slice());
+                                partial.extend_from_slice(&input_buf.split_to(1));
                             },
                             _ => unreachable!(),
                         };
@@ -114,7 +114,7 @@ impl FastcgiRequestHandler for Base64ifyHandler {
                         state.column = 0;
                     }
 
-                    for chunk in input_buf.as_slice().chunks(3) {
+                    for chunk in input_buf.chunks(3) {
                         if chunk.len() == 3 {
                             write_base64(chunk, body_response.buffer.as_mut());
                             state.column += 4;
@@ -143,8 +143,7 @@ impl FastcgiRequestHandler for Base64ifyHandler {
 
                 println!("done");
                 body_response.finish()
-            })
-            .boxed()
+            }))
     }
 }
 

@@ -1,6 +1,6 @@
 use super::super::*;
 
-use tokio_core::io::Io;
+use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_proto::streaming::multiplex::*;
 
 use std::io;
@@ -8,7 +8,7 @@ use std::io;
 #[derive(Debug, Default)]
 pub struct FastcgiProto;
 
-impl<IO: Io + 'static> ServerProto<IO> for FastcgiProto {
+impl<IO: AsyncRead + AsyncWrite + 'static> ServerProto<IO> for FastcgiProto {
     type Request = FastcgiRecord;
     type RequestBody = FastcgiRecord;
     type Response = FastcgiRecord;

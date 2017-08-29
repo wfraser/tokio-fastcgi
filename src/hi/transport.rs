@@ -1,7 +1,8 @@
 use super::super::*;
 
 use futures::{Stream, Sink, Poll, StartSend, Async};
-use tokio_core::io::{Framed, Io};
+use tokio_io::{AsyncRead, AsyncWrite};
+use tokio_io::codec::Framed;
 use tokio_proto::streaming::multiplex::*;
 
 use std::collections::BTreeSet;
@@ -10,7 +11,7 @@ use std::io;
 /// Manages a FastCGI connection, by binding a codec that translates bytes into multiplexed FastCGI
 /// streams. This also closes the connection when no streams are active (unless one of them
 /// specifies the `FCGI_KEEP_CONN` bit in the `BeginRequest` record).
-pub struct FastcgiTransport<IO: Io + 'static> {
+pub struct FastcgiTransport<IO: AsyncRead + AsyncWrite + 'static> {
     inner: Option<Framed<IO, FastcgiMultiplexedPipelinedCodec>>,
     in_flight: Requests,
     keep_connection: bool,
@@ -47,7 +48,7 @@ impl Requests {
     }
 }
 
-impl<IO: Io + 'static> FastcgiTransport<IO> {
+impl<IO: AsyncRead + AsyncWrite + 'static> FastcgiTransport<IO> {
     pub fn new(io: IO) -> FastcgiTransport<IO> {
         let codec = FastcgiMultiplexedPipelinedCodec::default();
         FastcgiTransport {
@@ -58,12 +59,12 @@ impl<IO: Io + 'static> FastcgiTransport<IO> {
     }
 }
 
-impl<IO: Io + 'static, ReadBody> Transport<ReadBody> for FastcgiTransport<IO> {
+impl<IO: AsyncRead + AsyncWrite + 'static, ReadBody> Transport<ReadBody> for FastcgiTransport<IO> {
     // This is a nice place to put some extra logic if needed. See:
     // https://tokio-rs.github.io/tokio-proto/tokio_proto/streaming/multiplex/trait.Transport.html
 }
 
-impl<IO: Io + 'static> Stream for FastcgiTransport<IO> {
+impl<IO: AsyncRead + AsyncWrite + 'static> Stream for FastcgiTransport<IO> {
     type Item = Frame<FastcgiRecord, FastcgiRecord, io::Error>;
     type Error = io::Error;
 
@@ -109,7 +110,7 @@ impl<IO: Io + 'static> Stream for FastcgiTransport<IO> {
     }
 }
 
-impl<IO: Io + 'static> Sink for FastcgiTransport<IO> {
+impl<IO: AsyncRead + AsyncWrite + 'static> Sink for FastcgiTransport<IO> {
     type SinkItem = Frame<FastcgiRecord, FastcgiRecord, io::Error>;
     type SinkError = io::Error;
 

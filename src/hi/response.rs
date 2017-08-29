@@ -1,9 +1,9 @@
 use super::super::*;
 
-use futures::{future, BoxFuture, Future, Sink};
-use futures::stream::{self, BoxStream, Stream};
+use bytes::BytesMut;
+use futures::{future, Future, Sink};
+use futures::stream::{self, Stream};
 use futures::sync::mpsc;
-use tokio_core::io::EasyBuf;
 use tokio_proto::streaming::Body;
 
 use std::collections::HashMap;
@@ -12,7 +12,7 @@ use std::io;
 pub struct FastcgiRequest {
     pub role: Role,
     pub params: HashMap<String, String>,
-    pub body: BoxStream<EasyBuf, io::Error>,
+    pub body: Box<Stream<Item=BytesMut, Error=io::Error>>,
     request_id: u16,
     sender: mpsc::Sender<FastcgiRecord>,
 }
@@ -38,13 +38,12 @@ impl FastcgiRequest {
                     Err(io::Error::new(io::ErrorKind::InvalidData, msg))
                 }
             }
-        }).take_while(|buf| Ok(buf.len() != 0)) // empty Stdin record signals the end.
-            .boxed();
+        }).take_while(|buf| Ok(!buf.is_empty())); // empty Stdin record signals the end.
 
         FastcgiRequest {
             role: role,
             params: params,
-            body: buf_stream,
+            body: Box::new(buf_stream),
             request_id: request_id,
             sender: sender,
         }
@@ -82,19 +81,16 @@ impl FastcgiHeadersResponse {
         self.headers.remove(name);
     }
 
-    pub fn send_headers(self) -> BoxFuture<FastcgiBodyResponse, io::Error> {
+    pub fn send_headers(self) -> Box<Future<Item=FastcgiBodyResponse, Error=io::Error> + Send> {
         debug!("sending headers");
-        let mut out = EasyBuf::new();
-        {
-            let mut buf_mut = out.get_mut();
-            for (ref key, ref value) in self.headers {
-                buf_mut.extend_from_slice(key.as_bytes());
-                buf_mut.extend_from_slice(b": ");
-                buf_mut.extend_from_slice(value.as_bytes());
-                buf_mut.extend_from_slice(b"\r\n");
-            }
-            buf_mut.extend_from_slice(b"\r\n");
+        let mut out = BytesMut::new();
+        for (ref key, ref value) in self.headers {
+            out.extend_from_slice(key.as_bytes());
+            out.extend_from_slice(b": ");
+            out.extend_from_slice(value.as_bytes());
+            out.extend_from_slice(b"\r\n");
         }
+        out.extend_from_slice(b"\r\n");
 
         let record = FastcgiRecord {
             request_id: self.request_id,
@@ -103,11 +99,10 @@ impl FastcgiHeadersResponse {
 
         let request_id = self.request_id;
 
-        self.sender
+        Box::new(self.sender
             .send(record)
             .map(move |sender| FastcgiBodyResponse::new(request_id, sender))
-            .map_err(|e| io::Error::new(io::ErrorKind::BrokenPipe, e))
-            .boxed()
+            .map_err(|e| io::Error::new(io::ErrorKind::BrokenPipe, e)))
     }
 }
 
@@ -127,7 +122,7 @@ impl FastcgiBodyResponse {
         }
     }
 
-    pub fn flush(mut self) -> BoxFuture<FastcgiBodyResponse, io::Error> {
+    pub fn flush(mut self) -> Box<Future<Item=FastcgiBodyResponse, Error=io::Error>> {
         debug!("flushing body of {} bytes", self.buffer.len());
         let request_id = self.request_id;
 
@@ -136,32 +131,30 @@ impl FastcgiBodyResponse {
         let records = buffer
             .chunks(0xFFFF)
             .map(move |slice| {
-                Ok(FastcgiRecord {
+                FastcgiRecord {
                     request_id: request_id,
-                    body: FastcgiRecordBody::Stdout(EasyBuf::from(slice.to_vec())),
-                })
+                    body: FastcgiRecordBody::Stdout(BytesMut::from(slice.to_vec())),
+                }
             })
             .collect::<Vec<_>>();
 
-        self.sender
+        Box::new(self.sender
             .take()
             .unwrap()
-            .send_all(stream::iter(records))
+            .send_all(stream::iter_ok(records))
             .map(move |(stream, _sink)| {
                 FastcgiBodyResponse::new(request_id, stream)
             })
-            .map_err(|e| io::Error::new(io::ErrorKind::BrokenPipe, e))
-            .boxed()
+            .map_err(|e| io::Error::new(io::ErrorKind::BrokenPipe, e)))
     }
 
-    pub fn finish(self) -> BoxFuture<(), io::Error> {
+    pub fn finish(self) -> Box<Future<Item=(), Error=io::Error>> {
         debug!("finishing body");
         if self.buffer.is_empty() {
-            future::ok(()).boxed()
+            Box::new(future::ok(()))
         } else {
-            self.flush()
-                .map(|_| ())
-                .boxed()
+            Box::new(self.flush()
+                .map(|_| ()))
         }
     }
 }

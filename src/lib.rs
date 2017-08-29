@@ -1,8 +1,10 @@
 extern crate byteorder;
+extern crate bytes;
 #[macro_use] extern crate enum_primitive;
 extern crate futures;
 #[macro_use] extern crate log;
 extern crate tokio_core;
+extern crate tokio_io;
 extern crate tokio_proto;
 extern crate tokio_service;
 

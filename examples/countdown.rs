@@ -7,7 +7,7 @@ extern crate tokio_core;
 extern crate tokio_proto;
 extern crate tokio_uds;
 
-use futures::{future, BoxFuture, Future, Stream};
+use futures::{future, Future, Stream};
 use futures::sync::oneshot;
 use tokio_core::reactor::Core;
 use tokio_proto::BindServer;
@@ -27,11 +27,11 @@ fn umask(mask: u32) -> u32 {
 struct CountdownHandler(i32);
 
 impl FastcgiRequestHandler for CountdownHandler {
-    fn call(&self, request: FastcgiRequest) -> BoxFuture<(), io::Error> {
+    fn call(&self, request: FastcgiRequest) -> Box<Future<Item=(), Error=io::Error>> {
         let start = self.0;
         let mut headers_response = request.response();
         headers_response.set_header("Content-Type", "text/plain");
-        headers_response.send_headers()
+        let x = headers_response.send_headers()
             .and_then(move |mut body_response| {
                 println!("beginning countdown from {}", start);
 
@@ -49,32 +49,34 @@ impl FastcgiRequestHandler for CountdownHandler {
                     &mut format!("Counting down from {}!\n", start).into_bytes());
                 body_response.flush()
             }).and_then(move |body_response| {
-                future::loop_fn((start, body_response), |(i, mut body_response)| {
+                future::loop_fn((start, body_response), |(i, mut body_response)| -> Box<Future<Item=future::Loop<_,_>, Error=_>> {
                     if i == 0 {
-                        future::ok(future::Loop::Break(body_response)).boxed()
+                        Box::new(future::ok(future::Loop::Break(body_response)))
                     } else {
                         println!("{}", i);
                         body_response.buffer.append(&mut format!("{}\n", i).into_bytes());
 
-                        body_response.flush()
+                        Box::new(body_response.flush()
                             .and_then(move |next| {
                                 let (tx, rx) = oneshot::channel::<()>();
 
                                 thread::spawn(move || {
                                     thread::sleep(Duration::from_millis(1000));
-                                    tx.complete(());
+                                    tx.send(()).unwrap();
                                 });
 
                                 rx.map_err(|e| panic!("{}", e))
                                     .map(move |()| future::Loop::Continue((i - 1, next)))
-                            }).boxed()
+                            }))
                     }
                 })
             }).and_then(|mut body_response| {
                 println!("Done!");
                 body_response.buffer.extend_from_slice(b"Done!\n");
                 body_response.finish()
-            }).boxed()
+            });
+
+        Box::new(x)
     }
 }
 

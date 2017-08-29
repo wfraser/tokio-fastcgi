@@ -1,6 +1,7 @@
 use super::super::*;
 
-use tokio_core::io::{Codec, EasyBuf};
+use bytes::BytesMut;
+use tokio_io::codec::{Decoder, Encoder};
 use tokio_proto::streaming::multiplex::*;
 
 use std::io;
@@ -10,11 +11,11 @@ pub struct FastcgiMultiplexedPipelinedCodec {
     inner: FastcgiLowlevelCodec,
 }
 
-impl Codec for FastcgiMultiplexedPipelinedCodec {
-    type In = Frame<FastcgiRecord, FastcgiRecord, io::Error>;
-    type Out = Frame<FastcgiRecord, FastcgiRecord, io::Error>;
+impl Decoder for FastcgiMultiplexedPipelinedCodec {
+    type Item = Frame<FastcgiRecord, FastcgiRecord, io::Error>;
+    type Error = io::Error;
 
-    fn decode(&mut self, buf: &mut EasyBuf) -> Result<Option<Self::In>, io::Error> {
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         match self.inner.decode(buf) {
             Ok(Some(record)) => {
                 match record.body {
@@ -27,7 +28,7 @@ impl Codec for FastcgiMultiplexedPipelinedCodec {
                             solo: false
                         }))
                     },
-                    FastcgiRecordBody::Stdin(ref buf) if buf.len() == 0 => {
+                    FastcgiRecordBody::Stdin(ref buf) if buf.is_empty() => {
                         debug!("stdin is done; sending empty body chunk");
                         Ok(Some(Frame::Body {
                             id: record.request_id as RequestId,
@@ -57,8 +58,13 @@ impl Codec for FastcgiMultiplexedPipelinedCodec {
             }
         }
     }
+}
 
-    fn encode(&mut self, msg: Self::Out, buf: &mut Vec<u8>) -> io::Result<()> {
+impl Encoder for FastcgiMultiplexedPipelinedCodec {
+    type Item = Frame<FastcgiRecord, FastcgiRecord, io::Error>;
+    type Error = io::Error;
+
+    fn encode(&mut self, msg: Self::Item, buf: &mut BytesMut) -> Result<(), Self::Error> {
         match msg {
             Frame::Message { id, message, body, solo } => {
                 debug!("encoding message: {} {:?} body={:?} solo={:?}", id, message, body, solo);

@@ -1,9 +1,9 @@
 use super::super::*;
 
+use bytes::BytesMut;
 use futures::{future, stream, Future, Sink, Stream};
 use futures::sync::mpsc;
 use tokio_core::reactor::Remote;
-use tokio_core::io::EasyBuf;
 use tokio_proto::streaming::{Message, Body};
 use tokio_service::Service;
 
@@ -57,12 +57,12 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
             Message::WithBody(record, _body) => {
                 let msg = format!("unexpected first record instead of BeginRequest: {:?}", record);
                 error!("{}", msg);
-                return future::err(invalid_data(msg)).boxed();
+                return Box::new(future::err(invalid_data(msg)));
             },
             Message::WithoutBody(_) => {
                 let msg = format!("unexpected WithoutBody response: {:?}", req);
                 error!("{}", msg);
-                return future::err(invalid_data(msg)).boxed();
+                return Box::new(future::err(invalid_data(msg)));
             },
         };
 
@@ -80,9 +80,9 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
                         } else {
                             debug!("consuming a params record");
                             for &(ref name_buf, ref value_buf) in params {
-                                let name = String::from_utf8_lossy(name_buf.as_slice())
+                                let name = String::from_utf8_lossy(name_buf)
                                                   .into_owned();
-                                let value = String::from_utf8_lossy(value_buf.as_slice())
+                                let value = String::from_utf8_lossy(value_buf)
                                                   .into_owned();
                                 params_map.insert(name, value);
                             }
@@ -159,21 +159,21 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
                         debug!("merged streams yielded something: {:?}", maybe_record);
 
                         let end_records = vec![
-                            Ok(FastcgiRecord {
+                            FastcgiRecord {
                                 request_id: id,
-                                body: FastcgiRecordBody::Stdout(EasyBuf::new()),
-                            }),
-                            Ok(FastcgiRecord {
+                                body: FastcgiRecordBody::Stdout(BytesMut::new()),
+                            },
+                            FastcgiRecord {
                                 request_id: id,
-                                body: FastcgiRecordBody::Stderr(EasyBuf::new()),
-                            }),
-                            Ok(FastcgiRecord {
+                                body: FastcgiRecordBody::Stderr(BytesMut::new()),
+                            },
+                            FastcgiRecord {
                                 request_id: id,
                                 body: FastcgiRecordBody::EndRequest(EndRequest {
                                     app_status: 0,
                                     protocol_status: ProtocolStatus::RequestComplete,
                                 })
-                            }),
+                            },
                         ];
 
                         // TODO: what if `handle()` returns `None`?
@@ -185,7 +185,7 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
 
                                 let records = record_stream
                                     .map(|maybe_record| maybe_record.unwrap())
-                                    .chain(stream::iter(end_records))
+                                    .chain(stream::iter_ok(end_records))
                                     .then(Ok);
 
                                 let (body_sender, body) = Body::<FastcgiRecord, io::Error>::pair();
@@ -209,7 +209,7 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
                                 let (body_sender, body) = Body::<FastcgiRecord, io::Error>::pair();
 
                                 reactor_handle.spawn(
-                                    body_sender.send_all(stream::iter(end_records).then(Ok))
+                                    body_sender.send_all(stream::iter_ok(end_records).then(Ok))
                                         .map_err(|e| {
                                             error!("error sending response body records: {}", e);
                                         })
@@ -222,7 +222,7 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
                                         request_id: id,
                                         // Send a header-body separator (i.e. send zero headers).
                                         body: FastcgiRecordBody::Stdout(
-                                            EasyBuf::from(b"\r\n".to_vec())),
+                                            BytesMut::from(b"\r\n".to_vec())),
                                     },
                                     body)
                             },

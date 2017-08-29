@@ -7,7 +7,7 @@ extern crate tokio_core;
 extern crate tokio_proto;
 extern crate tokio_uds;
 
-use futures::{BoxFuture, Future, Stream};
+use futures::{Future, Stream};
 use tokio_core::reactor::Core;
 use tokio_proto::BindServer;
 use tokio_uds::*;
@@ -36,20 +36,19 @@ impl HelloHandler {
 }
 
 impl FastcgiRequestHandler for HelloHandler {
-    fn call(&self, request: FastcgiRequest) -> BoxFuture<(), io::Error> {
+    fn call(&self, request: FastcgiRequest) -> Box<Future<Item=(), Error=io::Error>> {
         let mut headers_response = request.response();
         headers_response.set_header("Content-Type", "text/plain");
 
         let count = self.request_count.fetch_add(1, Ordering::SeqCst);
 
-        headers_response.send_headers()
+        Box::new(headers_response.send_headers()
             .and_then(move |mut body_response| {
                 println!("making the response");
                 let body = format!("Hello from {:?}: {}\n", request.params["REQUEST_URI"], count);
                 body_response.buffer.append(&mut body.into_bytes());
                 body_response.finish()
-            })
-            .boxed()
+            }))
     }
 }
 

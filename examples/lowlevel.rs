@@ -1,14 +1,17 @@
 extern crate tokio_fastcgi;
 use tokio_fastcgi::*;
 
+extern crate bytes;
 extern crate env_logger;
 extern crate futures;
 extern crate tokio_core;
+extern crate tokio_io;
 extern crate tokio_uds;
 
+use bytes::BytesMut;
 use futures::{future, Stream};
 use tokio_core::reactor::Core;
-use tokio_core::io::{Io, EasyBuf};
+use tokio_io::AsyncRead;
 use tokio_uds::*;
 
 use std::fs;
@@ -19,8 +22,8 @@ fn umask(mask: u32) -> u32 {
     unsafe { umask(mask) }
 }
 
-fn print_data(buf: &EasyBuf) {
-    for (i, byte) in buf.as_slice().iter().enumerate() {
+fn print_data(buf: &BytesMut) {
+    for (i, byte) in buf.iter().enumerate() {
         if i % 8 == 0 {
             if i != 0 {
                 println!("");
@@ -41,8 +44,8 @@ fn print_record(record: &FastcgiRecord) {
             println!("params - {}:", params.len());
             for &(ref name, ref value) in params {
                 println!("  {} = {}",
-                         String::from_utf8_lossy(name.as_slice()),
-                         String::from_utf8_lossy(value.as_slice()));
+                         String::from_utf8_lossy(name),
+                         String::from_utf8_lossy(value));
             }
         },
         FastcgiRecordBody::Data(ref buf) => {
@@ -82,7 +85,7 @@ fn main() {
             .take_while(move |record| {
                 print_record(record);
                 let done = match record.body {
-                    FastcgiRecordBody::Stdin(ref buf) if buf.len() == 0 => true,
+                    FastcgiRecordBody::Stdin(ref buf) if buf.is_empty() => true,
                     _ => false
                 };
                 future::ok(!done)
