@@ -71,7 +71,7 @@ impl<IO: AsyncRead + AsyncWrite + 'static> Stream for FastcgiTransport<IO> {
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         trace!("poll");
         match self.inner.as_mut() {
-            Some(mut io) => {
+            Some(io) => {
                 debug!("poll: calling inner IO");
                 let result = io.poll();
                 debug!("poll: got {:?}", result);

@@ -28,7 +28,7 @@ impl NetworkU16 {
         }
     }
 
-    pub fn get(&self) -> u16 {
+    pub fn get(self) -> u16 {
         NetworkEndian::read_u16(
             unsafe {
                 slice::from_raw_parts(

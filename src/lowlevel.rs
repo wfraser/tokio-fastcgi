@@ -55,8 +55,8 @@ fn read_header(buf: &mut BytesMut) -> Option<FastcgiRecordHeader> {
     } else {
         // Only borrow from the buffer until we can check the length.
         let header: FastcgiRecordHeader = unsafe { from_bytes(&buf[0..header_len]) };
-        let content_length = header.content_length;
-        if buf.len() < content_length.get() as usize {
+        let content_length = header.content_length.get() as usize;
+        if buf.len() < content_length {
             debug!("insufficient buffer for message");
             None
         } else {
