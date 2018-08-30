@@ -96,17 +96,22 @@ impl FastcgiRequestHandler for Base64ifyHandler {
                     // Take the partial data from the last iteration (if any) and fill it up with
                     // data from this iteration.
                     if let Some(mut partial) = state.partial.take() {
-                        match partial.len() {
-                            1 => {
-                                partial.extend_from_slice(&input_buf.split_to(2));
-                            },
-                            2 => {
-                                partial.extend_from_slice(&input_buf.split_to(1));
-                            },
-                            _ => unreachable!(),
-                        };
-                        write_base64(&partial, body_response.buffer.as_mut());
-                        state.column += 4;
+                        // how many bytes round it out?
+                        let fill_count = std::cmp::min(
+                            input_buf.len(),
+                            match partial.len() {
+                                1 => 2,
+                                2 => 1,
+                                _ => unreachable!(),
+                            });
+                        partial.extend_from_slice(&input_buf.split_to(fill_count));
+                        if partial.len() == 3 {
+                            write_base64(&partial, body_response.buffer.as_mut());
+                            state.column += 4;
+                        } else {
+                            // still need more; put it back
+                            state.partial = Some(partial);
+                        }
                     }
 
                     if state.column == 76 {
