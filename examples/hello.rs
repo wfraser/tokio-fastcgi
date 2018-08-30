@@ -45,7 +45,11 @@ impl FastcgiRequestHandler for HelloHandler {
         Box::new(headers_response.send_headers()
             .and_then(move |mut body_response| {
                 println!("making the response");
-                let body = format!("Hello from {:?}: {}\n", request.params["REQUEST_URI"], count);
+                let request_uri = request.params.get("REQUEST_URI")
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or("<no REQUEST_URI set!>");
+                let body = format!("Hello from {:?}: {}\n", request_uri, count);
                 body_response.buffer.append(&mut body.into_bytes());
                 body_response.finish()
             }))
