@@ -128,7 +128,7 @@ fn read_begin_request_body(buf: &mut BytesMut) -> io::Result<BeginRequest> {
         }
     };
     Ok(BeginRequest {
-        role: role,
+        role,
         keep_connection: (raw.flags & 1) == 1,
     })
 }
@@ -206,8 +206,8 @@ impl Decoder for FastcgiLowlevelCodec {
         debug!("buffer now has {} bytes", buf.len());
 
         let message = FastcgiRecord {
-            request_id: request_id,
-            body: body,
+            request_id,
+            body,
         };
 
         Ok(Some(message))

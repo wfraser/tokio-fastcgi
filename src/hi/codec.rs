@@ -22,7 +22,7 @@ impl Decoder for FastcgiMultiplexedPipelinedCodec {
                     FastcgiRecordBody::BeginRequest(_) => {
                         debug!("got BeginRequest, sending header chunk");
                         Ok(Some(Frame::Message {
-                            id: record.request_id as RequestId,
+                            id: RequestId::from(record.request_id),
                             message: record,
                             body: true,
                             solo: false
@@ -31,7 +31,7 @@ impl Decoder for FastcgiMultiplexedPipelinedCodec {
                     FastcgiRecordBody::Stdin(ref buf) if buf.is_empty() => {
                         debug!("stdin is done; sending empty body chunk");
                         Ok(Some(Frame::Body {
-                            id: record.request_id as RequestId,
+                            id: RequestId::from(record.request_id),
                             chunk: None,
                         }))
                     },
@@ -42,7 +42,7 @@ impl Decoder for FastcgiMultiplexedPipelinedCodec {
                         }
                         debug!("sending body chunk");
                         Ok(Some(Frame::Body {
-                            id: record.request_id as RequestId,
+                            id: RequestId::from(record.request_id),
                             chunk: Some(record)
                         }))
                     }

@@ -19,8 +19,8 @@ pub struct FastcgiService<H: FastcgiRequestHandler + 'static> {
 impl<H: FastcgiRequestHandler + 'static> FastcgiService<H> {
     pub fn new(reactor_handle: Remote, handler: Arc<H>) -> FastcgiService<H> {
         FastcgiService {
-            reactor_handle: reactor_handle,
-            handler: handler,
+            reactor_handle,
+            handler,
         }
     }
 }

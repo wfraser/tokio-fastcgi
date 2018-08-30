@@ -1,5 +1,5 @@
 use std::slice;
-use std::mem::{size_of, transmute};
+use std::mem::size_of;
 
 pub unsafe fn as_bytes<T: Copy>(x: &T) -> &[u8] {
     slice::from_raw_parts(
@@ -9,5 +9,5 @@ pub unsafe fn as_bytes<T: Copy>(x: &T) -> &[u8] {
 }
 
 pub unsafe fn from_bytes<T: Copy>(bytes: &[u8]) -> T {
-    *transmute::<*const u8, *const T>(bytes.as_ptr())
+    *(bytes.as_ptr() as *const T)
 }

@@ -43,24 +43,22 @@ impl<S, M, F> Future for StreamProcess<S, M, F>
         match mem::replace(&mut self.state, State::Empty) {
             State::Empty => panic!("cannot poll StreamProcess twice!"),
             State::Processing(mut stream, mut state) => {
-                loop {
-                    match try!(stream.poll()) {
-                        Async::Ready(Some(ref x)) => {
-                            let done = (self.processor)(x, &mut state);
-                            if done {
-                                return Ok(Async::Ready((stream, state)));
-                            } else {
-                                self.state = State::Processing(stream, state);
-                                return Ok(Async::NotReady);
-                            }
-                        },
-                        Async::Ready(None) => {
-                            return Ok(Async::Ready((stream, state)));
-                        },
-                        Async::NotReady => {
+                match try!(stream.poll()) {
+                    Async::Ready(Some(ref x)) => {
+                        let done = (self.processor)(x, &mut state);
+                        if done {
+                            Ok(Async::Ready((stream, state)))
+                        } else {
                             self.state = State::Processing(stream, state);
-                            return Ok(Async::NotReady);
+                            Ok(Async::NotReady)
                         }
+                    },
+                    Async::Ready(None) => {
+                        Ok(Async::Ready((stream, state)))
+                    },
+                    Async::NotReady => {
+                        self.state = State::Processing(stream, state);
+                        Ok(Async::NotReady)
                     }
                 }
             }

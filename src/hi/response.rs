@@ -41,11 +41,11 @@ impl FastcgiRequest {
         }).take_while(|buf| Ok(!buf.is_empty())); // empty Stdin record signals the end.
 
         FastcgiRequest {
-            role: role,
-            params: params,
+            role,
+            params,
             body: Box::new(buf_stream),
-            request_id: request_id,
-            sender: sender,
+            request_id,
+            sender,
         }
     }
 
@@ -67,9 +67,9 @@ impl FastcgiHeadersResponse {
             "X-Powered-By".to_owned(),
             concat!("tokio-fastcgi/", env!("CARGO_PKG_VERSION")).to_owned());
         FastcgiHeadersResponse {
-            sender:  sender,
-            request_id: request_id,
-            headers: headers,
+            sender,
+            request_id,
+            headers,
         }
     }
 
@@ -125,7 +125,7 @@ impl FastcgiBodyResponse {
     fn new(request_id: u16, sender: mpsc::Sender<FastcgiRecord>) -> FastcgiBodyResponse {
         FastcgiBodyResponse {
             sender: Some(sender),
-            request_id: request_id,
+            request_id,
             buffer: Vec::new(),
         }
     }
@@ -140,7 +140,7 @@ impl FastcgiBodyResponse {
             .chunks(0xFFFF)
             .map(move |slice| {
                 FastcgiRecord {
-                    request_id: request_id,
+                    request_id,
                     body: FastcgiRecordBody::Stdout(BytesMut::from(slice.to_vec())),
                 }
             })

@@ -63,7 +63,7 @@ impl NetworkU32 {
         }
     }
 
-    pub fn get(&self) -> u32 {
+    pub fn get(self) -> u32 {
         NetworkEndian::read_u32(
             unsafe {
                 slice::from_raw_parts(
