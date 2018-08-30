@@ -53,7 +53,16 @@ fn read_header(buf: &mut BytesMut) -> Option<FastcgiRecordHeader> {
         debug!("insufficient buffer for header");
         None
     } else {
-        Some(unsafe { from_bytes(&buf.split_to(header_len)) })
+        // Only borrow from the buffer until we can check the length.
+        let header: FastcgiRecordHeader = unsafe { from_bytes(&buf[0..header_len]) };
+        let content_length = header.content_length;
+        if buf.len() < content_length.get() as usize {
+            debug!("insufficient buffer for message");
+            None
+        } else {
+            // Consume from the buffer now.
+            Some(unsafe { from_bytes(&buf.split_to(header_len)) })
+        }
     }
 }
 
@@ -143,10 +152,8 @@ impl Decoder for FastcgiLowlevelCodec {
         }
 
         let content_len = header.content_length.get() as usize;
-        if buf.len() < content_len {
-            debug!("insufficient buffer for the content");
-            return Ok(None);
-        }
+        assert!(buf.len() >= content_len); // should have been checked earlier
+        let mut content_buf = buf.split_to(content_len);
 
         let record_type = RecordType::from_u8(header.record_type).unwrap_or_else(|| {
             warn!("unknwon record type {}", header.record_type);
@@ -157,7 +164,6 @@ impl Decoder for FastcgiLowlevelCodec {
         debug!("request id: {}; record type: {:?}, {} bytes of content",
                request_id, record_type, content_len);
 
-        let mut content_buf = buf.split_to(content_len);
         let body = match record_type {
             RecordType::BeginRequest => {
                 FastcgiRecordBody::BeginRequest(read_begin_request_body(&mut content_buf)?)
