@@ -73,6 +73,14 @@ impl FastcgiHeadersResponse {
         }
     }
 
+    pub fn headers(&self) -> &HashMap<String, String> {
+        &self.headers
+    }
+
+    pub fn headers_mut(&mut self) -> &mut HashMap<String, String> {
+        &mut self.headers
+    }
+
     pub fn set_header<K: Into<String>, V: Into<String>>(&mut self, name: K, value: V) {
         self.headers.insert(name.into(), value.into());
     }
