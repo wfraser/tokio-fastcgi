@@ -4,14 +4,14 @@ use tokio_fastcgi::*;
 extern crate bytes;
 extern crate env_logger;
 extern crate futures;
+extern crate tokio_codec;
 extern crate tokio_core;
-extern crate tokio_io;
 extern crate tokio_uds;
 
 use bytes::BytesMut;
 use futures::{future, Stream};
+use tokio_codec::Decoder;
 use tokio_core::reactor::Core;
-use tokio_io::AsyncRead;
 use tokio_uds::*;
 
 use std::fs;
@@ -81,7 +81,7 @@ fn main() {
     let srv = listener.incoming().for_each(move |(socket, _addr)| {
         println!("{:#?}", socket);
 
-        socket.framed(FastcgiLowlevelCodec)
+        FastcgiLowlevelCodec.framed(socket)
             .take_while(move |record| {
                 print_record(record);
                 let done = match record.body {
