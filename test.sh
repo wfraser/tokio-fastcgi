@@ -1,6 +1,7 @@
-#!/usr/bin/env -i /bin/bash
+#!/usr/bin/env bash
 
-# note the shebang above: -i means empty environment
+# clean out our environment
+[ "$HOME" != "" ] && exec -c $0 $@
 
 # This is the set of variables my nginx/1.10.2 sends:
 export QUERY_STRING=""
