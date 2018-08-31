@@ -53,15 +53,16 @@ fn read_header(buf: &mut BytesMut) -> Option<FastcgiRecordHeader> {
         debug!("insufficient buffer for header");
         None
     } else {
-        // Only borrow from the buffer until we can check the length.
-        let header: FastcgiRecordHeader = unsafe { from_bytes(&buf[0..header_len]) };
+        // Don't consume from the buffer until we can check the length.
+        let header = from_bytes::<FastcgiRecordHeader>(&buf[0..header_len]);
         let content_length = header.content_length.get() as usize;
         if buf.len() < content_length {
             debug!("insufficient buffer for message");
             None
         } else {
-            // Consume from the buffer now.
-            Some(unsafe { from_bytes(&buf.split_to(header_len)) })
+            // Length is good, we can proceed to consume from the buffer.
+            buf.advance(header_len);
+            Some(header)
         }
     }
 }
@@ -118,7 +119,7 @@ fn write_params(params: Vec<(Vec<u8>, Vec<u8>)>) -> BytesMut {
 
 fn read_begin_request_body(buf: &mut BytesMut) -> io::Result<BeginRequest> {
     let len = size_of::<BeginRequestBody>();
-    let raw: BeginRequestBody = unsafe { from_bytes(&buf.split_to(len)) };
+    let raw = from_bytes::<BeginRequestBody>(&buf.split_to(len));
     let role = match Role::from_u16(raw.role.get()) {
         Some(role) => role,
         None => {
@@ -228,7 +229,7 @@ impl Encoder for FastcgiLowlevelCodec {
                     protocol_status: end_body.protocol_status as u8,
                     reserved: [0u8; 3],
                 };
-                let buf = BytesMut::from(unsafe { as_bytes(&s11n_body) }.to_vec());
+                let buf = BytesMut::from(as_bytes(&s11n_body).to_vec());
                 (RecordType::EndRequest, buf)
             },
             FastcgiRecordBody::GetValuesResult(values) => {
@@ -258,7 +259,7 @@ impl Encoder for FastcgiLowlevelCodec {
             padding_length: 0,
             reserved: 0,
         };
-        buf.extend_from_slice(unsafe { as_bytes(&header) });
+        buf.extend_from_slice(as_bytes(&header));
         buf.extend_from_slice(&data);
 
         Ok(())
