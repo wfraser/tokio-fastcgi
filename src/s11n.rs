@@ -49,7 +49,7 @@ enum_from_primitive! {
     }
 }
 
-#[repr(C, packed)]
+#[repr(packed)]
 #[derive(Clone, Copy, Debug)]
 pub struct FastcgiRecordHeader {
     pub version: u8,
@@ -60,7 +60,7 @@ pub struct FastcgiRecordHeader {
     pub reserved: u8,
 }
 
-#[repr(C, packed)]
+#[repr(packed)]
 #[derive(Clone, Copy, Debug)]
 pub struct BeginRequestBody {
     pub role: NetworkU16,
@@ -68,7 +68,7 @@ pub struct BeginRequestBody {
     pub reserved: [u8; 5],
 }
 
-#[repr(C, packed)]
+#[repr(packed)]
 #[derive(Clone, Copy, Debug)]
 pub struct EndRequestBody {
     pub app_status: NetworkU32,
