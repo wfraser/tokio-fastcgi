@@ -2,7 +2,7 @@ use super::super::*;
 
 use futures::{Stream, Sink, Poll, StartSend, Async};
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_io::codec::Framed;
+use tokio_codec::{Decoder, Framed};
 use tokio_proto::streaming::multiplex::*;
 
 use std::collections::BTreeSet;
@@ -52,7 +52,7 @@ impl<IO: AsyncRead + AsyncWrite + 'static> FastcgiTransport<IO> {
     pub fn new(io: IO) -> FastcgiTransport<IO> {
         let codec = FastcgiMultiplexedPipelinedCodec::default();
         FastcgiTransport {
-            inner: Some(io.framed(codec)),
+            inner: Some(codec.framed(io)),
             in_flight: Requests::new(),
             keep_connection: false,
         }
