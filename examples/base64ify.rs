@@ -167,9 +167,9 @@ fn main() {
     let remote = reactor.remote();
 
     umask(0);
-    let listener = UnixListener::bind(filename, &reactor.handle()).expect("failed to bind socket");
+    let listener = UnixListener::bind(filename).expect("failed to bind socket");
 
-    let srv = listener.incoming().for_each(|(socket, _addr)| {
+    let srv = listener.incoming().for_each(|socket| {
         println!("New connection: fd {}", socket.as_raw_fd());
 
         let service = FastcgiService::new(remote.clone(), Arc::new(Base64ifyHandler));

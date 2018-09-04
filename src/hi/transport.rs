@@ -126,8 +126,15 @@ impl<IO: AsyncRead + AsyncWrite + 'static> Sink for FastcgiTransport<IO> {
 
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
         trace!("poll_complete");
-        let result = self.inner.as_mut().expect("poll_complete called on dead connection")
-                         .poll_complete();
+        let result = match self.inner.as_mut() {
+            Some(inner) => inner.poll_complete(),
+            None => {
+                // poll_complete is basically a flush operation, so on a dead connection there's
+                // nothing to do. Callers shouldn't do this, but if it happens, it's okay.
+                info!("poll_complete called on a dead connection");
+                Ok(Async::Ready(()))
+            }
+        };
         if !self.keep_connection && self.in_flight.is_empty() {
             debug!("poll_complete: zero in-flight requests; dropping connection.");
             self.inner = None;
