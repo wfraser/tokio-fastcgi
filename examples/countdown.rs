@@ -27,7 +27,7 @@ fn umask(mask: u32) -> u32 {
 struct CountdownHandler(i32);
 
 impl FastcgiRequestHandler for CountdownHandler {
-    fn call(&self, request: FastcgiRequest) -> Box<Future<Item=(), Error=io::Error>> {
+    fn call(&self, request: FastcgiRequest) -> Box<dyn Future<Item=(), Error=io::Error>> {
         let start = self.0;
         let mut headers_response = request.response();
         headers_response.set_header("Content-Type", "text/plain");
@@ -49,7 +49,7 @@ impl FastcgiRequestHandler for CountdownHandler {
                     &mut format!("Counting down from {}!\n", start).into_bytes());
                 body_response.flush()
             }).and_then(move |body_response| {
-                future::loop_fn((start, body_response), |(i, mut body_response)| -> Box<Future<Item=future::Loop<_,_>, Error=_>> {
+                future::loop_fn((start, body_response), |(i, mut body_response)| -> Box<dyn Future<Item=future::Loop<_,_>, Error=_>> {
                     if i == 0 {
                         Box::new(future::ok(future::Loop::Break(body_response)))
                     } else {

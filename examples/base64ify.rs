@@ -27,9 +27,9 @@ fn umask(mask: u32) -> u32 {
 
 fn write_base64_digit(six_bits: u8, out: &mut Vec<u8>) {
     let c = match six_bits {
-        0...25 => b'A' + six_bits,
-        26...51 => b'a' + six_bits - 26,
-        52...61 => b'0' + six_bits - 52,
+        0..=25 => b'A' + six_bits,
+        26..=51 => b'a' + six_bits - 26,
+        52..=61 => b'0' + six_bits - 52,
         62 => b'+',
         63 => b'/',
         _ => panic!("input out of range")
@@ -71,7 +71,7 @@ fn write_base64(bytes: &[u8], out: &mut Vec<u8>) {
 struct Base64ifyHandler;
 
 impl FastcgiRequestHandler for Base64ifyHandler {
-    fn call(&self, request: FastcgiRequest) -> Box<Future<Item=(), Error=io::Error>> {
+    fn call(&self, request: FastcgiRequest) -> Box<dyn Future<Item=(), Error=io::Error>> {
         let mut headers_response = request.response();
         headers_response.set_header("Content-Type", "text/plain");
 

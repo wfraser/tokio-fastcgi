@@ -12,7 +12,7 @@ use std::io;
 pub struct FastcgiRequest {
     pub role: Role,
     pub params: HashMap<String, String>,
-    pub body: Box<Stream<Item=BytesMut, Error=io::Error>>,
+    pub body: Box<dyn Stream<Item=BytesMut, Error=io::Error>>,
     request_id: u16,
     sender: mpsc::Sender<FastcgiRecord>,
 }
@@ -89,7 +89,7 @@ impl FastcgiHeadersResponse {
         self.headers.remove(name);
     }
 
-    pub fn send_headers(self) -> Box<Future<Item=FastcgiBodyResponse, Error=io::Error> + Send> {
+    pub fn send_headers(self) -> Box<dyn Future<Item=FastcgiBodyResponse, Error=io::Error> + Send> {
         debug!("sending headers");
         let mut out = BytesMut::new();
         for (ref key, ref value) in self.headers {
@@ -130,7 +130,7 @@ impl FastcgiBodyResponse {
         }
     }
 
-    pub fn flush(mut self) -> Box<Future<Item=FastcgiBodyResponse, Error=io::Error>> {
+    pub fn flush(mut self) -> Box<dyn Future<Item=FastcgiBodyResponse, Error=io::Error>> {
         debug!("flushing body of {} bytes", self.buffer.len());
         let request_id = self.request_id;
 
@@ -156,7 +156,7 @@ impl FastcgiBodyResponse {
             .map_err(|e| io::Error::new(io::ErrorKind::BrokenPipe, e)))
     }
 
-    pub fn finish(self) -> Box<Future<Item=(), Error=io::Error>> {
+    pub fn finish(self) -> Box<dyn Future<Item=(), Error=io::Error>> {
         debug!("finishing body");
         if self.buffer.is_empty() {
             Box::new(future::ok(()))

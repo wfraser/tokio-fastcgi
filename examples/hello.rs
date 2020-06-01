@@ -36,7 +36,7 @@ impl HelloHandler {
 }
 
 impl FastcgiRequestHandler for HelloHandler {
-    fn call(&self, request: FastcgiRequest) -> Box<Future<Item=(), Error=io::Error>> {
+    fn call(&self, request: FastcgiRequest) -> Box<dyn Future<Item=(), Error=io::Error>> {
         let mut headers_response = request.response();
         headers_response.set_header("Content-Type", "text/plain");
 

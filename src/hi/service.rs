@@ -33,7 +33,7 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
     type Request = Message<FastcgiRecord, Body<FastcgiRecord, io::Error>>;
     type Response = Message<FastcgiRecord, Body<FastcgiRecord, io::Error>>;
     type Error = io::Error;
-    type Future = Box<Future<Item = Self::Response, Error = Self::Error>>;
+    type Future = Box<dyn Future<Item = Self::Response, Error = Self::Error>>;
 
     fn call(&self, req: Self::Request) -> Self::Future {
 
@@ -132,7 +132,7 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
                 // This makes a stream that yields nothing and finishes only once the handler is
                 // done. It allows us to drive the handler while simultaneously pumping messages,
                 // by merging the two streams together.
-                let handler_stream: Box<Stream<Item = Option<FastcgiRecord>, Error = io::Error>>
+                let handler_stream: Box<dyn Stream<Item = Option<FastcgiRecord>, Error = io::Error>>
                     = Box::new(
                         handler.call(request)
                             .into_stream()
@@ -145,7 +145,7 @@ impl<H: FastcgiRequestHandler + 'static> Service for FastcgiService<H> {
 
                 // We also have `response_receiver`, which is a stream of `FastcgiRecord`,
                 // which are the records the handler generates as it runs.
-                let record_stream: Box<Stream<Item = Option<FastcgiRecord>, Error = io::Error>>
+                let record_stream: Box<dyn Stream<Item = Option<FastcgiRecord>, Error = io::Error>>
                     = Box::new(
                         response_receiver.map(Some)
                             .or_else(|()| Ok(None))
