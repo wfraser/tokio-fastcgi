@@ -1,7 +1,7 @@
 use super::super::*;
 
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_proto::streaming::multiplex::*;
+use tokio_proto::streaming::multiplex::ServerProto;
 
 use std::io;
 

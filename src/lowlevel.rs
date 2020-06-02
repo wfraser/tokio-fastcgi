@@ -1,11 +1,11 @@
-use super::endian::*;
-use super::rawstruct::*;
-use super::s11n::*;
+use crate::endian::*;
+use crate::rawstruct::*;
+use crate::s11n::*;
 
 use byteorder::{ByteOrder, NetworkEndian};
-use bytes::BytesMut;
+use bytes::{Buf, BytesMut};
 use enum_primitive::FromPrimitive;
-use tokio_io::codec::{Decoder, Encoder};
+use tokio_util::codec::{Decoder, Encoder};
 
 use std::io;
 use std::mem::size_of;
@@ -202,7 +202,7 @@ impl Decoder for FastcgiLowlevelCodec {
             debug!("insufficient buffer for the padding");
             return Ok(None);
         }
-        buf.split_to(header.padding_length as usize);
+        buf.advance(header.padding_length as usize);
 
         debug!("buffer now has {} bytes", buf.len());
 
@@ -215,11 +215,10 @@ impl Decoder for FastcgiLowlevelCodec {
     }
 }
 
-impl Encoder for FastcgiLowlevelCodec {
-    type Item = FastcgiRecord;
+impl Encoder<FastcgiRecord> for FastcgiLowlevelCodec {
     type Error = io::Error;
 
-    fn encode(&mut self, msg: Self::Item, buf: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, msg: FastcgiRecord, buf: &mut BytesMut) -> Result<(), Self::Error> {
         let (record_type, data): (RecordType, BytesMut) = match msg.body {
             FastcgiRecordBody::Stdout(buf) => (RecordType::Stdout, buf),
             FastcgiRecordBody::Stderr(buf) => (RecordType::Stderr, buf),
@@ -229,15 +228,15 @@ impl Encoder for FastcgiLowlevelCodec {
                     protocol_status: end_body.protocol_status as u8,
                     reserved: [0u8; 3],
                 };
-                let buf = BytesMut::from(as_bytes(&s11n_body).to_vec());
+                let buf = BytesMut::from(as_bytes(&s11n_body));
                 (RecordType::EndRequest, buf)
             },
             FastcgiRecordBody::GetValuesResult(values) => {
                 (RecordType::GetValuesResult, write_params(values))
             },
             FastcgiRecordBody::UnknownTypeResponse(typ) => {
-                let out: Vec<u8> = Vec::<u8>::from([typ, 0, 0, 0, 0, 0, 0, 0].as_ref());
-                (RecordType::UnknownType, BytesMut::from(out))
+                let out = [typ, 0, 0, 0, 0, 0, 0, 0];
+                (RecordType::UnknownType, BytesMut::from(&out[..]))
             },
             _ => {
                 let msg = format!("illegal record {:?} from FastCGI server", msg.body);

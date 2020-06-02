@@ -1,10 +1,8 @@
-use super::super::*;
-
 use bytes::BytesMut;
-use tokio_io::codec::{Decoder, Encoder};
-use tokio_proto::streaming::multiplex::*;
-
+use crate::lowlevel::{FastcgiLowlevelCodec, FastcgiRecordBody};
+use crate::hi::frame::{Frame, RequestId};
 use std::io;
+use tokio_util::codec::{Decoder, Encoder};
 
 #[derive(Debug, Default)]
 pub struct FastcgiMultiplexedPipelinedCodec {
@@ -12,10 +10,10 @@ pub struct FastcgiMultiplexedPipelinedCodec {
 }
 
 impl Decoder for FastcgiMultiplexedPipelinedCodec {
-    type Item = Frame<FastcgiRecord, FastcgiRecord, io::Error>;
+    type Item = Frame;
     type Error = io::Error;
 
-    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Frame>, Self::Error> {
         match self.inner.decode(buf) {
             Ok(Some(record)) => {
                 match record.body {
@@ -60,11 +58,10 @@ impl Decoder for FastcgiMultiplexedPipelinedCodec {
     }
 }
 
-impl Encoder for FastcgiMultiplexedPipelinedCodec {
-    type Item = Frame<FastcgiRecord, FastcgiRecord, io::Error>;
+impl Encoder<Frame> for FastcgiMultiplexedPipelinedCodec {
     type Error = io::Error;
 
-    fn encode(&mut self, msg: Self::Item, buf: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, msg: Frame, buf: &mut BytesMut) -> Result<(), Self::Error> {
         match msg {
             Frame::Message { id, message, body, solo } => {
                 debug!("encoding message: {} {:?} body={:?} solo={:?}", id, message, body, solo);
