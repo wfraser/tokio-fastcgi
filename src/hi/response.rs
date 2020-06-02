@@ -1,10 +1,10 @@
-use super::super::*;
-
 use bytes::BytesMut;
-use futures::{future, Future, Sink};
+use crate::lowlevel::{FastcgiRecord, Role};
+use futures::channel::mpsc;
+use futures::future::Future;
+use futures::sink::Sink;
 use futures::stream::{self, Stream};
-use futures::sync::mpsc;
-use tokio_proto::streaming::Body;
+//use tokio_proto::streaming::Body;
 
 use std::collections::HashMap;
 use std::io;
